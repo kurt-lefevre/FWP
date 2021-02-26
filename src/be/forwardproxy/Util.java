@@ -28,31 +28,27 @@ public class Util {
         return -1;
     }
 
-    public static byte[] replace(byte[] byteArr, String fromStr, String toStr) {
+        
+    public static int replace(byte[] byteArr, String fromStr, String toStr) {
+        return replace(byteArr, 0, byteArr.length, fromStr, toStr);
+    }
+    
+    public static int replace(byte[] byteArr, int start, int end, String fromStr, String toStr) {
         int index;
-        if((index=indexOf(byteArr, 0, byteArr.length, fromStr))==-1) return byteArr;
+        if((index=indexOf(byteArr, start, end, fromStr))==-1) return -1;
         
         // fromStr was found
         int fromLen=fromStr.length();
-        byte[] toArr = toStr.getBytes();
-        byte[] newArr;
-        if(fromLen==toArr.length) newArr=byteArr;
-        else {
-            // create only new array is size is different
-            newArr = new byte[byteArr.length + toArr.length - fromLen];
+        byte[] toStrArr = toStr.getBytes();
 
-            // copy part before index from source to new array
-            System.arraycopy(byteArr, 0, newArr, 0, index);
-            
-            // copy remaining bytes form source to new array
-            System.arraycopy(byteArr, index+fromLen, newArr, 
-                    index+toArr.length, byteArr.length-fromLen-index);
-        }  
+        // copy remaining bytes form source to array
+        System.arraycopy(byteArr, index+fromLen, byteArr, 
+                index+toStrArr.length, end-fromLen-index);
 
-        // copy toArr to new array
-        System.arraycopy(toArr, 0, newArr, index, toArr.length);
+        // copy toArr to array
+        System.arraycopy(toStrArr, 0, byteArr, index, toStrArr.length);
         
-        return newArr;
+        return index;
     }
 
 /*    public static byte[] remove(byte[] byteArr, int start, int len) {

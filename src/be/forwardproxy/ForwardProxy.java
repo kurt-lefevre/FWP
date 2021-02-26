@@ -13,7 +13,6 @@
 
 package be.forwardproxy;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -24,7 +23,7 @@ import java.net.SocketException;
 import java.net.URL;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V0.5.220221";
+    private final static String APP_VERSION = "ForwardProxy V0.6.260221";
     private final static String UNDERLINE =   "========================";
     private int threadCount;
     
@@ -45,7 +44,7 @@ public class ForwardProxy {
     
     // stream & request buffer size
     public final static int READ_BUFFER_SIZE = 4096;
-    
+
     private class RequestHandler extends Thread {
         private Socket socket;
         private String host, path;
@@ -59,12 +58,12 @@ public class ForwardProxy {
         }
         
         public void run() {
-            Util.log("[" + this.getId() + "]: Starting thread. Thread count: " +  ++threadCount);
-            OggDecoder oggDecoder = new OggDecoder(this.getId());
+            Util.log("[" + this.getId() + "]: Start thread. Count: " +  ++threadCount);
 
             // get client inputstream
             InputStream fromIS=null;
             try {
+                socket.setSoTimeout(5000);
                 fromIS = socket.getInputStream();
             } catch (IOException ex) {
                 Util.log("[" + this.getId() + "]: Failed to connect to Client Input Stream: "
@@ -76,6 +75,7 @@ public class ForwardProxy {
             Socket toSocket = null;
             try {
                 toSocket = new Socket(host, port);
+                toSocket.setSoTimeout(5000);
             } catch (IOException ex) {
                 Util.log("[" + this.getId() + "]: Failed to connect to music service: " 
                         + ex.getMessage());
@@ -111,12 +111,11 @@ public class ForwardProxy {
                 byte[] reqArr;
                 while((bytesRead = fromIS.read(inputBytes))!=-1) {
                     // create request and send it to the music server/service
-                    reqArr = Util.replace(inputBytes, "/", path);
-                    // String request = "GET " + path + new String(inputBytes, 5, bytesRead-5); 
-                    Util.log("[" + this.getId() + "]: " + "Org Req received: [" + new String(inputBytes, 0, bytesRead) + "]");
+                    Util.replace(inputBytes, 0, bytesRead, "/", path);
+                    // Util.log("[" + this.getId() + "]: " + "Org Req received: [" + new String(inputBytes, 0, bytesRead) + "]");
 
                     try {
-                        toOS.write(reqArr, 0, bytesRead+path.length()-1);
+                        toOS.write(inputBytes, 0, bytesRead+path.length()-1);
                     } catch (IOException ex) {
                         Util.log("[" + this.getId() + "]: Cannot send request to server: " + ex.getMessage());
                         System.exit(CANNOT_SEND_REQUEST);
@@ -127,14 +126,22 @@ public class ForwardProxy {
                     try {
                         while((bytesRead=toIS.read(inputBytes, offset, READ_BUFFER_SIZE-offset))!=-1) {
 //                            Util.log("[" + this.getId() + "]: Resp: [" + new String(inputBytes, offset, bytesRead) +"]");
-
-                            index=Util.indexOf(inputBytes, offset, offset+bytesRead, "OggS");
-                            if(index!=-1) {
+                            // start decoder if OggS found
+                            if((index=Util.indexOf(inputBytes, offset, offset+bytesRead, "OggS"))!=-1) {
                                 // Util.log("[" + this.getId() + "]: OggS found. Index1: " + index);
-                                offset = index;
-                                oggDecoder.decode(fromOS, inputBytes, offset);
+                                OggDecoder oggDecoder = new OggDecoder(this.getId());
+                                oggDecoder.decode(fromOS, inputBytes, index);
+                                oggDecoder.stop();
                                 break;
                             } else {
+                                // no Ogg stream of Ogg not found yet
+                                // check to replace content type
+                                Util.replace(inputBytes, offset, offset+bytesRead, "/ogg", "/wav");
+                                /*if(Util.replace(inputBytes, offset, offset+bytesRead, "/ogg", "/flac")!=-1) {
+                                    bytesRead++;
+                                    Util.log("[" + this.getId() + "]: Replaced ogg: [" + new String(inputBytes, 0, bytesRead) +"]");
+                                }*/
+
                                 offset += bytesRead;
                                 if(offset==READ_BUFFER_SIZE) {
                                     try {
@@ -143,7 +150,7 @@ public class ForwardProxy {
                                         break;
                                     }
                                     offset=0;
-                                    Util.log("[" + this.getId() + "]: Wrote full buffer");
+                                    // Util.log("[" + this.getId() + "]: Wrote full buffer");
                                 }
                             }
                         }
@@ -158,8 +165,7 @@ public class ForwardProxy {
                         + ex.getMessage());
                 System.exit(CANNOT_READ_REQUEST);
             } finally {
-                //Logger.log("[" + this.getId() + "]: Closing connections");
-                oggDecoder.stop();
+                // oggDecoder.stop();
                 try { fromOS.close(); } catch (Exception ex) {};
                 try { toIS.close(); } catch (Exception ex) {};
                 try { toOS.close(); } catch (Exception ex) {};
@@ -167,7 +173,7 @@ public class ForwardProxy {
                 try { socket.close(); } catch (Exception ex) {};
                 try { toSocket.close(); } catch (Exception ex) {};
     
-                Util.log("[" + this.getId() + "]: Stopping thread. Thread count: " + --threadCount);
+                Util.log("[" + this.getId() + "]: Stop thread. Count: " + --threadCount);
             }
         }
     }
@@ -208,7 +214,7 @@ public class ForwardProxy {
         }
     }
 
-    public int start2(String[] args) {
+    /*public int start2(String[] args) {
         try {
             FileOutputStream fos = new FileOutputStream("fons.flac");
             byte[] bytes = new byte[READ_BUFFER_SIZE];
@@ -218,39 +224,29 @@ public class ForwardProxy {
         } catch (Exception ex) {
             Util.log("Fout! " + ex);
         }
-        
         return 0;
-    }
+    }*/
 
-    /*public int start3(String[] args) {
-        byte[] ar1="1234567890".getBytes();
-        int len = ar1.length;
-        System.out.println("Ind: " + Util.indexOf(ar1, 0, len, "456"));
-        System.out.println("Ind: " + Util.indexOf(ar1, 2, len, "456"));
-        System.out.println("Ind: " + Util.indexOf(ar1, 3, 5, "456"));
-        System.out.println("Ind: " + Util.indexOf(ar1, 2, 6, "456"));
-        System.out.println("Ind: " + Util.indexOf(ar1, 0, len, "1234567890"));
-        System.out.println("Ind: " + Util.indexOf(ar1, 0, len, "12345678901"));
-        System.out.println("Ind: " + Util.indexOf(ar1, 0, len, "129"));
-        System.out.println("Ind: " + Util.indexOf(ar1, 0, len, "90"));
-        System.out.println("Ind: " + Util.indexOf(ar1, 7, len, "90"));
+    /*public int start4(String[] args) {
+        byte[] ar1= new byte[20];
+        System.arraycopy("1234567890".getBytes(), 0, ar1, 0, "1234567890".length());
+        
+        System.out.println("Replace: " + Util.replace(ar1, 0, 10, "345", "ZER"));
+        System.out.println(new String(ar1));
+        System.arraycopy("1234567890".getBytes(), 0, ar1, 0, "1234567890".length());
+        System.out.println("Replace: " + Util.replace(ar1, 0, 10, "345", "ABCD"));
+        System.out.println(new String(ar1));
+        System.arraycopy("1234567890".getBytes(), 0, ar1, 0, "1234567890".length());
+        System.out.println("Replace: " + Util.replace(ar1, "234", "AB"));
+        System.out.println(new String(ar1));
+        System.out.println("Replace: " + Util.replace(ar1, "kurt", "AB"));
+        System.out.println(new String(ar1));
+        System.out.println("Replace: " + Util.replace(ar1, "kurtkurtkurt", "AB"));
+        System.out.println(new String(ar1));
         
         return 0;
     }*/
-    
-/*    public int start4(String[] args) {
-        byte[] ar1="1234567890".getBytes();
-        System.out.println("Replace: " + new String(Util.replace(ar1, "345", "ZER")));
-        System.out.println("Replace: " + new String(Util.replace(ar1, "345", "ABCD")));
-        System.out.println("Replace: " + new String(Util.replace(ar1, "90", "ABC")));
-        System.out.println("Replace: " + new String(Util.replace(ar1, "234", "AB")));
-        System.out.println("Replace: " + new String(Util.replace(ar1, "kurt", "AB")));
-        System.out.println("Replace: " + new String(Util.replace(ar1, "kurtkurtkurt", "AB")));
-        System.out.println("Remove: " + new String(Util.remove(ar1, 3, 2)));
-        
-        return 0;
-    }*/
-    
+
     public int start(String[] args) {
         // Check # arguments
         if(args.length != 2) {
