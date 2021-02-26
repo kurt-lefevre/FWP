@@ -6,31 +6,26 @@ import java.io.OutputStream;
 import java.net.SocketException;
 
 public class OggDecoder {
-    private Process p;
-    private long threadId;
+    private final long threadId;
 
     public OggDecoder(long threadId) {
         this.threadId = threadId;
-        
-        ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-i", "http://mscp3.live-streams.nl:8340/jazz-flac.flac", 
-//        ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-i", "http://thecheese.ddns.net:8004/stream", 
-                    "-f", "wav", "-map_metadata", "0",  "-id3v2_version", "3", "-");
+    }
+    
+    public void decode(OutputStream os, byte[] inputBytes, int offset) {
+//        ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-i", "http://mscp3.live-streams.nl:8340/jazz-flac.flac", 
+//                    "-f", "wav", "-map_metadata", "0",  "-id3v2_version", "3", "-");
+        ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-i", "http://thecheese.ddns.net:8004/stream", 
+                    "-f", "wav", "-");
         pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+        Process p=null;
         try {         
             p = pb.start();
         } catch (IOException ex) {
             Util.log("[" + threadId + "]: Cannot start ffmpeg process: " + ex.getMessage());
             System.exit(ForwardProxy.CANNOT_START_FFMPEG);
         }
-        Util.log("[" + threadId + "]: Start ffmpeg process");
-    }
-    
-    public void stop() {
-        p.destroy();
-        Util.log("[" + threadId + "]: Stop ffmpeg process");
-    }
-    
-    public void decode(OutputStream os, byte[] inputBytes, int offset) {
+
         Util.log("[" + threadId + "]: Start transcoding");
         int bytesRead;
         InputStream pIS = p.getInputStream();
@@ -38,8 +33,8 @@ public class OggDecoder {
             while((bytesRead=pIS.read(inputBytes, offset, ForwardProxy.READ_BUFFER_SIZE-offset))!=-1) {
                 offset += bytesRead;
                 if(offset==ForwardProxy.READ_BUFFER_SIZE) {
-                    //int endOfResp = Util.indexOf(inputBytes, 0, bytesRead, "\r\n\r\n");
-                    //if(endOfResp!=-1) Util.log("[" + threadId + "]: Resp: [" +  new String(inputBytes, 0, endOfResp) +"]");
+                    int endOfResp = Util.indexOf(inputBytes, 0, bytesRead, "\r\n\r\n");
+                    if(endOfResp!=-1) Util.log("[" + threadId + "]: Resp: [" +  new String(inputBytes, 0, endOfResp) +"]");
                     try {
                         os.write(inputBytes);
                         // Util.log("[" + threadId + "]: Decoder wrote buffer");
@@ -54,6 +49,9 @@ public class OggDecoder {
                     + ex.getMessage());
             System.exit(ForwardProxy.CANNOT_READ_SERVER_RESPONSE);
         }
+
+        // Stop process
+        p.destroy();
         Util.log("[" + threadId + "]: Stop transcoding");
     }
 }

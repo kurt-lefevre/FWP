@@ -9,7 +9,9 @@
 // FLAC: http://stream.radioparadise.com/flac
 // FLAC: http://mscp2.live-streams.nl:8100/flac.flac
 // FLAC: http://mscp3.live-streams.nl:8340/jazz-flac.flac  // NAIM
+// FLAC: http://icecast3.streamserver24.com:18800/motherearth 
 // FLAC: http://thecheese.ddns.net:8004/stream
+
 
 
 package be.forwardproxy;
@@ -22,6 +24,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.URL;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ForwardProxy {
     private final static String APP_VERSION = "ForwardProxy V0.6.260221";
@@ -77,7 +81,7 @@ public class ForwardProxy {
             Socket toSocket = null;
             try {
                 toSocket = new Socket(host, port);
-                // toSocket.setSoTimeout(SOCKET_TIMEOUT_MS);
+                //toSocket.setSoTimeout(SOCKET_TIMEOUT_MS);
             } catch (IOException ex) {
                 Util.log("[" + this.getId() + "]: Failed to connect to music service: " 
                         + ex.getMessage());
@@ -107,68 +111,58 @@ public class ForwardProxy {
 
             // read request from client
             byte[] inputBytes = new byte[READ_BUFFER_SIZE]; 
-            int offset, index;
+            int bytesRead=0;
             try {
-                int bytesRead;
-                byte[] reqArr;
-                while((bytesRead = fromIS.read(inputBytes))!=-1) {
-                    // create request and send it to the music server/service
-                    Util.replace(inputBytes, 0, bytesRead, "/", path);
-                    Util.log("[" + this.getId() + "]: " + "Org Req received: [" + new String(inputBytes, 0, bytesRead) + "]");
-
-                    try {
-                        toOS.write(inputBytes, 0, bytesRead+path.length()-1);
-                    } catch (IOException ex) {
-                        Util.log("[" + this.getId() + "]: Cannot send request to server: " + ex.getMessage());
-                        System.exit(CANNOT_SEND_REQUEST);
-                    }
+                bytesRead = fromIS.read(inputBytes);
+            } catch (IOException ex) {
+                Util.log("[" + this.getId() + "]: Cannot read incoming request: " + ex.getMessage());
+                System.exit(CANNOT_READ_REQUEST);
+            }
+            
+            // create request and send it to the music server/service
+            Util.replace(inputBytes, 0, bytesRead, "/", path);
+            try {
+                toOS.write(inputBytes, 0, bytesRead+path.length()-1);
+            } catch (IOException ex) {
+                Util.log("[" + this.getId() + "]: Cannot send request to server: " + ex.getMessage());
+                System.exit(CANNOT_SEND_REQUEST);
+            }
                     
-                    // read response
-                    offset=0;
-                    try {
-                        while((bytesRead=toIS.read(inputBytes, offset, READ_BUFFER_SIZE-offset))!=-1) {
-                            Util.log("[" + this.getId() + "]: Resp: [" + new String(inputBytes, offset, bytesRead) +"]");
-                            // start decoder if OggS found
-                            if((index=Util.indexOf(inputBytes, offset, offset+bytesRead, "OggS"))!=-1) {
-                                // Util.log("[" + this.getId() + "]: OggS found. Index1: " + index);
-                                OggDecoder oggDecoder = new OggDecoder(this.getId());
-                                oggDecoder.decode(fromOS, inputBytes, index);
-                                oggDecoder.stop();
-                                break;
-                            } else {
-                                // no Ogg stream of Ogg not found yet
-                                // check to replace content type
-                                if(Util.replace(inputBytes, offset, offset+bytesRead, "audio/ogg", "audio/wav")==-1) 
-                                if(Util.replace(inputBytes, offset, offset+bytesRead, "application/ogg", "audio/wav")!=-1)
-                                    bytesRead-=6;
-                                    
-                                /*if(Util.replace(inputBytes, offset, offset+bytesRead, "/ogg", "/flac")!=-1) {
-                                    bytesRead++;
-                                    Util.log("[" + this.getId() + "]: Replaced ogg: [" + new String(inputBytes, 0, bytesRead) +"]");
-                                }*/
+            // read response(s)
+            int offset=0, index;
+            try {
+                while((bytesRead=toIS.read(inputBytes, offset, READ_BUFFER_SIZE-offset))!=-1) {
+//                            Util.log("[" + this.getId() + "]: Resp: [" + new String(inputBytes, offset, bytesRead) +"]");
+                    // start decoder if OggS found
+                    if((index=Util.indexOf(inputBytes, offset, offset+bytesRead, "OggS"))!=-1) {
+                        // Util.log("[" + this.getId() + "]: OggS found. Index1: " + index);
+                        new OggDecoder(this.getId()).decode(fromOS, inputBytes, index);
+                        break;
+                    } else {
+                        // no Ogg stream of Ogg not found yet
+                        // check to replace content type
+                        Util.replace(inputBytes, offset, offset+bytesRead, "/ogg", "/wav");
+                        /*if(Util.replace(inputBytes, offset, offset+bytesRead, "/ogg", "/flac")!=-1) {
+                            bytesRead++;
+                            Util.log("[" + this.getId() + "]: Replaced ogg: [" + new String(inputBytes, 0, bytesRead) +"]");
+                        }*/
 
-                                offset += bytesRead;
-                                if(offset==READ_BUFFER_SIZE) {
-                                    try {
-                                        fromOS.write(inputBytes);
-                                    } catch (SocketException ex) { ex.printStackTrace();
-                                        break;
-                                    }
-                                    offset=0;
-                                    // Util.log("[" + this.getId() + "]: Wrote full buffer");
-                                }
+                        offset += bytesRead;
+                        if(offset==READ_BUFFER_SIZE) {
+                            try {
+                                fromOS.write(inputBytes);
+                            } catch (SocketException ex) { //ex.printStackTrace();
+                                break;
                             }
+                            offset=0;
+                            // Util.log("[" + this.getId() + "]: Wrote full buffer");
                         }
-                    } catch (IOException ex) {
-                        Util.log("[" + this.getId() + "]: Cannot read server response: "
-                                + ex.getMessage());
-                        System.exit(CANNOT_READ_SERVER_RESPONSE);
                     }
                 }
             } catch (IOException ex) {
-                Util.log("[" + this.getId() + "]: Cannot read incoming request: "
+                Util.log("[" + this.getId() + "]: Cannot read server response: "
                         + ex.getMessage());
-                System.exit(CANNOT_READ_REQUEST);
+                System.exit(CANNOT_READ_SERVER_RESPONSE);
             } finally {
                 // oggDecoder.stop();
                 try { fromOS.close(); } catch (Exception ex) {};
