@@ -4,12 +4,28 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class Util {
-    private static final SimpleDateFormat dateFormatter = new SimpleDateFormat("HH:mm:ss ");
+    private static final SimpleDateFormat dateFormatter = new SimpleDateFormat("dd/MM HH:mm:ss ");
+    private static StringBuffer sBuf = new StringBuffer();
+    public static boolean DEBUG = false;
     
-    public static void log(String logInfo) {
-        System.out.println(dateFormatter.format(new Date()) + logInfo);
+    public static void deb(long threadId, int threadCount, String logInfo) {
+        if(!DEBUG) return;
+        log(threadId, threadCount, logInfo);
+    }
+
+    synchronized public static void log(String logInfo) {
+        sBuf.setLength(0);
+        sBuf.append(dateFormatter.format(new Date())).append(logInfo);
+        System.out.println(sBuf);
     }
     
+    synchronized public static void log(long threadId, int threadCount, String logInfo) {
+        sBuf.setLength(0);
+        sBuf.append(dateFormatter.format(new Date())).append('[').append(threadId).
+                append(':').append(threadCount).append("] ").append(logInfo);
+        System.out.println(sBuf);
+    }
+
     public static int indexOf(byte[] byteArr, String searchStr) {
         return indexOf(byteArr, 0, byteArr.length, searchStr);        
     }

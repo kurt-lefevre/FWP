@@ -14,35 +14,25 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V0.6.260221";
+    private final static String APP_VERSION = "ForwardProxy V0.8.280221";
     private final static String UNDERLINE =   "========================";
 
-    private int threadCount;
+    public static int threadCount;
     
     // exit statuses
     public final static int MISSING_ARGUMENTS = 1;
     public final static int INVALID_PORT = 2;
     public final static int PROXY_SERVER_CREATION_FAILED = 3;
-    public final static int SERVER_CONNECTION_FAILED = 4;
-    public final static int IS_FAILED = 5;
-    public final static int OS_FAILED = 6;
-    public final static int HTTPS_NOT_SUPPORTED = 7;
-    public final static int CANNOT_READ_REQUEST = 8;
-    public final static int CANNOT_SEND_REQUEST = 9;
-    public final static int CANNOT_READ_SERVER_RESPONSE = 10;
-    public final static int CANNOT_SEND_SERVER_RESPONSE = 11;
-    public final static int REQUEST_DISPATCH_FAILED = 12;
-    public final static int MALFORMED_URL = 13;
-    public final static int CANNOT_START_FFMPEG = 14;
+    public final static int HTTPS_NOT_SUPPORTED = 4;
+    public final static int REQUEST_DISPATCH_FAILED = 5;
+    public final static int CANNOT_START_FFMPEG = 6;
+    public final static int MALFORMED_URL = 7;
     
     // stream buffer size
-    public final static int READ_BUFFER_SIZE = 4096;
-    public final static int SOCKET_TIMEOUT_MS = 5000;
-    final static boolean DEBUG = true;
+    public final static int IO_BUFFER_SIZE_KB = 64;
+    public final static int IO_BUFFER_SIZE = IO_BUFFER_SIZE_KB * 1024;
 
     private class RequestHandler extends Thread {
         private final Socket socket;
@@ -50,6 +40,7 @@ public class ForwardProxy {
         private Socket toSocket;
         private InputStream fromIS, toIS;
         private OutputStream fromOS, toOS;
+        private final long threadId= this.getId();
         
         public RequestHandler(Socket socket, ProxyURL proxyUrl) {
             this.socket = socket;
@@ -61,20 +52,19 @@ public class ForwardProxy {
             try { toIS.close(); } catch (Exception ex) {};
             try { toOS.close(); } catch (Exception ex) {};
             try { fromIS.close(); } catch (Exception ex) {};
-            //try { socket.close(); } catch (Exception ex) {};
+            try { socket.close(); } catch (Exception ex) {};
             try { toSocket.close(); } catch (Exception ex) {};
 
-            Util.log("[" + this.getId() + "]: Stop thread. Count: " + --threadCount);
+            Util.log(threadId, --threadCount, "Stop thread for " + proxyUrl);
         }
 
         public void run() {
-            Util.log("[" + this.getId() + "]: Start thread. Count: " +  ++threadCount);
+            Util.log(threadId, ++threadCount, "Start thread for " + proxyUrl);
             // get client inputstream
             try {
-                //socket.setSoTimeout(SOCKET_TIMEOUT_MS);
                 fromIS = socket.getInputStream();
             } catch (IOException ex) {
-                Util.log("[" + this.getId() + "]: Failed to connect to Client Input Stream: "
+                Util.log(threadId, threadCount, "Failed to connect to Client Input Stream: "
                         + ex.getMessage());
                 closeConnections();
                 return;
@@ -83,9 +73,8 @@ public class ForwardProxy {
             // Connect to music service/server
             try {
                 toSocket = new Socket(proxyUrl.getHost(), proxyUrl.getPort());
-                //toSocket.setSoTimeout(SOCKET_TIMEOUT_MS);
             } catch (IOException ex) {
-                Util.log("[" + this.getId() + "]: Failed to connect to music service: " 
+                Util.log(threadId, threadCount, "Failed to connect to music service: " 
                         + ex.getMessage());
                 closeConnections();
                 return;
@@ -96,7 +85,7 @@ public class ForwardProxy {
                 fromOS = socket.getOutputStream();
                 toOS = toSocket.getOutputStream();
             } catch (IOException ex) {
-                Util.log("[" + this.getId() + "]: " + "Failed to connect to Output Streams: "
+                Util.log(threadId, threadCount, "Failed to connect to Output Streams: "
                         + ex.getMessage());
                 closeConnections();
                 return;
@@ -106,31 +95,30 @@ public class ForwardProxy {
             try {
                 toIS = toSocket.getInputStream();
             } catch (IOException ex) {
-                Util.log("[" + this.getId() + "]: Failed to connect to Server Input Stream: "
+                Util.log(threadId, threadCount, "Failed to connect to Server Input Stream: "
                         + ex.getMessage());
                 closeConnections();
                 return;
             }
 
             // read request from streamer
-            byte[] inputBytes = new byte[READ_BUFFER_SIZE]; 
+            byte[] inputBytes = new byte[IO_BUFFER_SIZE]; 
             int bytesRead=0;
             try {
                 bytesRead = fromIS.read(inputBytes);
             } catch (IOException ex) {
-                Util.log("[" + this.getId() + "]: Cannot read incoming request: " + ex.getMessage());
+                Util.log(threadId, threadCount, "Cannot read incoming request: " + ex.getMessage());
                 closeConnections();
                 return;
             }
-            
+
             // create request and send it to the music service
             Util.replace(inputBytes, 0, bytesRead, "/", proxyUrl.getPath());
-            if(DEBUG) Util.log("[" + this.getId() + "]: Req: [" + 
-                new String(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1) +"]");
+            // Util.deb(threadId, threadCount, "Req: [" + new String(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1) +"]");
             try {
                 toOS.write(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1);
             } catch (IOException ex) {
-                Util.log("[" + this.getId() + "]: Cannot send request to server: " + ex.getMessage());
+                Util.log(threadId, threadCount, "Cannot send request to server: " + ex.getMessage());
                 closeConnections();
                 return;
             }
@@ -138,56 +126,48 @@ public class ForwardProxy {
             // read response from music service
             try {
                 bytesRead=toIS.read(inputBytes);
-                if(DEBUG) Util.log("[" + this.getId() + "]: bytesRead: " + bytesRead);
+                // Util.deb(threadId, threadCount, "bytesRead: " + bytesRead);
             } catch (IOException ex) {
-                Util.log("[" + this.getId() + "]: Cannot read server response: "
-                        + ex.getMessage());
+                Util.log(threadId, threadCount, "Cannot read server response: " + ex.getMessage());
                 closeConnections();
                 return;
             }
-
+            
             // limit response to HTTP content
-            bytesRead=Util.indexOf(inputBytes, 0, bytesRead, "\r\n\r\n") + 4;
+            int offset=Util.indexOf(inputBytes, 0, bytesRead, "\r\n\r\n");
 
             // Replace Content-Type info
             boolean needDecoding = true;
-            if(Util.replace(inputBytes, 0, bytesRead, "audio/ogg", "audio/wav")==-1)
-                if(Util.replace(inputBytes, 0, bytesRead, "application/ogg", "audio/wav")!=-1)
+            if(Util.replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")==-1)
+                if(Util.replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1)
                     bytesRead-=6;
                 else needDecoding = false;
-            if(DEBUG) Util.log("[" + this.getId() + "]: Resp: [" + new String(inputBytes, 0, bytesRead) +"]");
-
-            // write response to streamer
-/*            try {
-                fromOS.write(inputBytes, 0, bytesRead);
-            } catch (IOException ex) { //ex.printStackTrace();
-                Util.log("[" + this.getId() + "]: Cannot send server response: "
-                        + ex.getMessage());
-                closeConnections();
-                return;
-            }*/
+            // Util.deb(threadId, threadCount, "Resp: [" + new String(inputBytes, 0, offset) +"]");
+            offset+=4; // add the \r\n pairs again
 
             // if decode request, pass on to decoder
             if(needDecoding) {
+                // bytesRead contains the total of bytes read last time
+                // offset points to the first byte after the http response; this
+                // is the start of the stream
                 new OggDecoder(this.getId(), proxyUrl.getUrlString()).
-                        decode(fromOS, inputBytes, bytesRead);
+                        decode(fromOS, inputBytes, offset);
             } else {
                 // Write till sreamer closes socket. 
-                int offset=bytesRead=0;
+                offset=bytesRead;
                 try {
-                    while((bytesRead=toIS.read(inputBytes, offset, READ_BUFFER_SIZE-offset))!=-1) {
-                        offset += bytesRead;
-                        if(offset==READ_BUFFER_SIZE) {
+                    while((bytesRead=toIS.read(inputBytes, offset, IO_BUFFER_SIZE-offset))!=-1) {
+                        offset+=bytesRead;
+                        if(offset==IO_BUFFER_SIZE) {
                             try {
                                 fromOS.write(inputBytes);
-                                if(DEBUG) Util.log("[" + this.getId() + "]: Wrote buffer");
+                                // Util.deb(threadId, threadCount, "Wrote buffer to streamer");
                             } catch (IOException ex) { break; }
                             offset=0;
                         }
-                    }
+                    } 
                 } catch (IOException ex) { 
-                    Util.log("[" + this.getId() + "]: Cannot read server response: "
-                        + ex.getMessage());
+                    Util.log(threadId, threadCount, "Cannot read server response: " + ex.getMessage());
                 }
             }
 
@@ -224,7 +204,7 @@ public class ForwardProxy {
     /*public int start2(String[] args) {
         try {
             FileOutputStream fos = new FileOutputStream("fons.flac");
-            byte[] bytes = new byte[READ_BUFFER_SIZE];
+            byte[] bytes = new byte[IO_BUFFER_SIZE];
             OggDecoder dec = new OggDecoder(-1);
             dec.decode(fos, bytes);
             fos.close();
@@ -235,6 +215,8 @@ public class ForwardProxy {
     }*/
     
     public int start(String[] args) {
+        //Util.DEBUG=true;
+        
         // Check # arguments
         if(args.length != 2) {
             System.err.println(APP_VERSION + "\n" + UNDERLINE +
@@ -266,6 +248,7 @@ public class ForwardProxy {
         Util.log(APP_VERSION);
         Util.log(UNDERLINE);
         Util.log("ForwardProxy port: " + forwardProxyPort);
+        Util.log("I/O Buffer size: " + ForwardProxy.IO_BUFFER_SIZE_KB+ " KB");
         Util.log("Forward URL: " + fwdURL);
         
         // start proxyserver

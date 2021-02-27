@@ -1,6 +1,5 @@
 package be.forwardproxy;
 
-import static be.forwardproxy.ForwardProxy.MALFORMED_URL;
 import java.net.MalformedURLException;
 import java.net.URL;
 
@@ -18,7 +17,7 @@ public class ProxyURL {
             url = new java.net.URL(this.urlString);
         } catch (MalformedURLException ex) {
             Util.log("URL is malformed [" + this.urlString + "]: " + ex.getMessage());
-            System.exit(MALFORMED_URL);
+            System.exit(ForwardProxy.MALFORMED_URL);
         }
 
         // Set default port
@@ -43,5 +42,10 @@ public class ProxyURL {
 
     public String getUrlString() {
         return urlString;
+    }
+
+    @Override
+    public String toString() {
+        return urlString ;
     }
 }
