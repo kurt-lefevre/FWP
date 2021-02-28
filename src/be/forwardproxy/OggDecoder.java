@@ -27,7 +27,7 @@ public class OggDecoder {
         }
         
         int bytesRead;
-        Util.log(threadId, ForwardProxy.threadCount, "OggDecoder: Start decoding");
+        Util.log(threadId, ForwardProxy.threadCount, "OggDecoder: Start");
         InputStream pIS = p.getInputStream();
         try {
             while((bytesRead=pIS.read(inputBytes, streamOffset, ForwardProxy.IO_BUFFER_SIZE-streamOffset))!=-1) {
@@ -35,9 +35,9 @@ public class OggDecoder {
                 if(streamOffset==ForwardProxy.IO_BUFFER_SIZE) {
                     try {
                         os.write(inputBytes);
-                        // Util.deb(threadId, ForwardProxy.threadCount, "OggDecoder: Sent buffer to streamer");
+                        if(Util.DEBUG) Util.deb(threadId, ForwardProxy.threadCount, "OggDecoder: Sent buffer to streamer");
                     } catch (SocketException ex) {  //ex.printStackTrace();
-                        // Util.deb(threadId, ForwardProxy.threadCount, "OggDecoder: Stream stopped");
+                        if(Util.DEBUG) Util.deb(threadId, ForwardProxy.threadCount, "OggDecoder: Stream stopped");
                         break;
                     }
                     streamOffset=0;   
@@ -49,6 +49,6 @@ public class OggDecoder {
 
         // Stop process
         p.destroy();
-        Util.log(threadId, ForwardProxy.threadCount, "OggDecoder: Stop decoding");
+        Util.log(threadId, ForwardProxy.threadCount, "OggDecoder: Stop");
     }
 }

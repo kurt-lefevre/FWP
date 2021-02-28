@@ -31,7 +31,7 @@ public class ForwardProxy {
     public final static int MALFORMED_URL = 7;
     
     // stream buffer size
-    public final static int IO_BUFFER_SIZE_KB = 64;
+    public final static int IO_BUFFER_SIZE_KB = 256;
     public final static int IO_BUFFER_SIZE = IO_BUFFER_SIZE_KB * 1024;
 
     private class RequestHandler extends Thread {
@@ -112,9 +112,14 @@ public class ForwardProxy {
                 return;
             }
 
+            // start decoder when "Range: bytes=0-" is in the request
+            boolean needDecoding = false;
+            if(Util.indexOf(inputBytes, 0, bytesRead, "bytes=0-")!=-1) 
+                needDecoding = true;
+            
             // create request and send it to the music service
             Util.replace(inputBytes, 0, bytesRead, "/", proxyUrl.getPath());
-            // Util.deb(threadId, threadCount, "Req: [" + new String(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1) +"]");
+            if(Util.DEBUG) Util.deb(threadId, threadCount, "Req: [" + new String(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1) +"]");
             try {
                 toOS.write(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1);
             } catch (IOException ex) {
@@ -126,7 +131,7 @@ public class ForwardProxy {
             // read response from music service
             try {
                 bytesRead=toIS.read(inputBytes);
-                // Util.deb(threadId, threadCount, "bytesRead: " + bytesRead);
+                if(Util.DEBUG) Util.deb(threadId, threadCount, "bytesRead: " + bytesRead);
             } catch (IOException ex) {
                 Util.log(threadId, threadCount, "Cannot read server response: " + ex.getMessage());
                 closeConnections();
@@ -137,12 +142,10 @@ public class ForwardProxy {
             int offset=Util.indexOf(inputBytes, 0, bytesRead, "\r\n\r\n");
 
             // Replace Content-Type info
-            boolean needDecoding = true;
             if(Util.replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")==-1)
                 if(Util.replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1)
                     bytesRead-=6;
-                else needDecoding = false;
-            // Util.deb(threadId, threadCount, "Resp: [" + new String(inputBytes, 0, offset) +"]");
+            if(Util.DEBUG) Util.deb(threadId, threadCount, "Resp: [" + new String(inputBytes, 0, offset) +"]");
             offset+=4; // add the \r\n pairs again
 
             // if decode request, pass on to decoder
@@ -161,7 +164,7 @@ public class ForwardProxy {
                         if(offset==IO_BUFFER_SIZE) {
                             try {
                                 fromOS.write(inputBytes);
-                                // Util.deb(threadId, threadCount, "Wrote buffer to streamer");
+                                if(Util.DEBUG) Util.deb(threadId, threadCount, "Sent buffer to streamer");
                             } catch (IOException ex) { break; }
                             offset=0;
                         }
@@ -215,7 +218,7 @@ public class ForwardProxy {
     }*/
     
     public int start(String[] args) {
-        //Util.DEBUG=true;
+        Util.DEBUG=true;
         
         // Check # arguments
         if(args.length != 2) {
