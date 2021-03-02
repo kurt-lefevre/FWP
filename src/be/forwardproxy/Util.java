@@ -2,28 +2,65 @@ package be.forwardproxy;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 public class Util {
+    public static boolean DEBUG = false;
+
+    public final static int LOGFILE_SIZE_KB = 1024;
+    public final static int LOGFILE_COUNT = 2;
     private static final SimpleDateFormat dateFormatter = new SimpleDateFormat("dd/MM HH:mm:ss ");
     private static StringBuffer sBuf = new StringBuffer();
-    public static boolean DEBUG = false;
+    private static Logger logger;
+    
+    private static class LogFileFormatter extends java.util.logging.Formatter {
+        @Override
+        public String format(LogRecord record) {
+            return record.getMessage() + "\n";
+        }
+    }
+    
+    public static void initializeLogger(String logfileName, int logfileSizeKb){
+        if(logger!=null) return; // we do it only once
+        logger = Logger.getLogger(Util.class.getName());
+
+        // add own handler
+        FileHandler handler=null;
+        try {
+            handler = new FileHandler(logfileName + "%g.log",
+                    logfileSizeKb * 1024, LOGFILE_COUNT, true);
+        } catch (Exception ex) {
+            log("Failed to initialize logger");
+        }
+        handler.setFormatter(new LogFileFormatter());
+        logger.addHandler(handler);
+        logger.setUseParentHandlers(false);
+        logger.setLevel(Level.INFO);
+    }
+    
     
     public static void deb(long threadId, int threadCount, String logInfo) {
         if(!DEBUG) return;
-        log(threadId, threadCount, logInfo);
+        sBuf.setLength(0);
+        sBuf.append(dateFormatter.format(new Date())).append('[').append(threadId).
+                append(':').append(threadCount).append("] ").append(logInfo);
+        System.out.println(sBuf);
     }
 
-    synchronized public static void log(String logInfo) {
-        sBuf.setLength(0);
-        sBuf.append(dateFormatter.format(new Date())).append(logInfo);
-        System.out.println(sBuf);
+    public static void log(String logInfo) {
+        log(-1, -1, logInfo);
     }
     
     synchronized public static void log(long threadId, int threadCount, String logInfo) {
         sBuf.setLength(0);
         sBuf.append(dateFormatter.format(new Date())).append('[').append(threadId).
                 append(':').append(threadCount).append("] ").append(logInfo);
-        System.out.println(sBuf);
+        String msg = sBuf.toString();
+        System.out.println(msg);
+        if(logger!=null) logger.log(Level.INFO, msg);
     }
 
     public static int indexOf(byte[] byteArr, String searchStr) {
@@ -33,6 +70,9 @@ public class Util {
     public static int indexOf(byte[] byteArr, int start, int end, String searchStr) {
         byte[] searchArr=searchStr.getBytes();
         int lastPos=end - searchArr.length;
+        
+        if(lastPos<0) return -1; // search string is longer than array
+        
         int y;
         for(int x=start; x<=lastPos; x++) {
             for(y=0; y<searchArr.length; y++)

@@ -4,13 +4,16 @@ import java.net.MalformedURLException;
 import java.net.URL;
 
 public class ProxyURL {
-    private String host;
-    private String path;
+    private final String host;
+    private final String path;
     private int port;
     private final String urlString;
+    private final String friendlyName;
+    private final String protocol;
 
-    public ProxyURL(String urlString) {
+    public ProxyURL(String urlString, String friendlyName) {
         this.urlString = urlString.strip();
+        this.friendlyName=friendlyName;
 
         URL url=null;
         try {
@@ -26,8 +29,17 @@ public class ProxyURL {
 
         host=url.getHost();
         path=url.getPath();
+        protocol=url.getProtocol();
     }
 
+    public String getFriendlyName() {
+        return friendlyName;
+    }
+
+    public String getProtocol() {
+        return protocol;
+    }
+   
     public String getHost() {
         return host;
     }

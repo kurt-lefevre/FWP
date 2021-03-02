@@ -8,14 +8,16 @@ import java.net.SocketException;
 public class OggDecoder {
     private final long threadId;
     private final String forwardUrl;
+    private final int ioBufferSize;
 
-    public OggDecoder(long threadId, String forwardUrl) {
+    public OggDecoder(long threadId, String forwardUrl, int ioBufferSize) {
         this.threadId = threadId;
         this.forwardUrl=forwardUrl;
+        this.ioBufferSize=ioBufferSize;
     }
 
     public void decode(OutputStream os, byte[] inputBytes, int streamOffset) {
-        ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-i", forwardUrl, 
+        ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-f", "flac", "-i", forwardUrl, 
             "-f", "wav", "-map_metadata", "0",  "-id3v2_version", "3", "-");
         pb.redirectError(ProcessBuilder.Redirect.DISCARD);
         Process p=null;
@@ -30,9 +32,9 @@ public class OggDecoder {
         Util.log(threadId, ForwardProxy.threadCount, "OggDecoder: Start");
         InputStream pIS = p.getInputStream();
         try {
-            while((bytesRead=pIS.read(inputBytes, streamOffset, ForwardProxy.IO_BUFFER_SIZE-streamOffset))!=-1) {
+            while((bytesRead=pIS.read(inputBytes, streamOffset, ioBufferSize-streamOffset))!=-1) {
                 streamOffset += bytesRead;
-                if(streamOffset==ForwardProxy.IO_BUFFER_SIZE) {
+                if(streamOffset==ioBufferSize) {
                     try {
                         os.write(inputBytes);
                         if(Util.DEBUG) Util.deb(threadId, ForwardProxy.threadCount, "OggDecoder: Sent buffer to streamer");
