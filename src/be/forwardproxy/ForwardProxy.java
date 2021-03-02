@@ -6,6 +6,7 @@
 // FLAC: http://icecast3.streamserver24.com:18800/motherearth  // 24 bit
 // FLAC: http://thecheese.ddns.net:8004/stream // 16 bit
 // OCI: http://158.101.168.33:9500/
+// https://github.com/ymnk/jorbis to decode ogg
 
 package be.forwardproxy;
 
@@ -45,7 +46,7 @@ public class ForwardProxy {
     public final static int MISSING_PORT = 10;
     
     public final static int IO_BUFFER_SIZE_KB = 384;
-    public final static int SOCKET_TIMEOUT_MS = 5000;
+    public final static int SOCKET_TIMEOUT_MS = 2000;
     
     private class RequestHandler extends Thread {
         private final Socket socket;
@@ -59,6 +60,41 @@ public class ForwardProxy {
             this.socket = socket;
         }
 
+        private int indexOf(byte[] byteArr, int start, int end, String searchStr) {
+            byte[] searchArr=searchStr.getBytes();
+            int lastPos=end - searchArr.length;
+
+            if(lastPos<0) return -1; // search string is longer than array
+
+            int y;
+            for(int x=start; x<=lastPos; x++) {
+                for(y=0; y<searchArr.length; y++)
+                    if(byteArr[x]==searchArr[y]) x++;
+                    else break;
+                if(y==searchArr.length) return x-y;
+            }
+
+            return -1;
+        }
+
+        private int replace(byte[] byteArr, int start, int end, String fromStr, String toStr) {
+            int index;
+            if((index=indexOf(byteArr, start, end, fromStr))==-1) return -1;
+
+            // fromStr was found
+            int fromLen=fromStr.length();
+            byte[] toStrArr = toStr.getBytes();
+
+            // copy remaining bytes form source to array
+            System.arraycopy(byteArr, index+fromLen, byteArr, 
+                    index+toStrArr.length, end-fromLen-index);
+
+            // copy toArr to array
+            System.arraycopy(toStrArr, 0, byteArr, index, toStrArr.length);
+
+            return index;
+        }
+        
         private void closeConnections() {
             try { toSocket.close(); } catch (Exception ex) {};
             try { toIS.close(); } catch (Exception ex) {};
@@ -95,15 +131,15 @@ public class ForwardProxy {
             }
 
             // check for valid request before continuing
-            if(Util.indexOf(inputBytes, 0, bytesRead, "Icy-MetaData: 1")==-1) {
+            if(indexOf(inputBytes, 0, bytesRead, "Icy-MetaData: 1")==-1) {
                 Util.log(threadId, threadCount, "Bad request");
                 closeConnections();
                 return;
             }
 
             // get searchPath from request
-            int startIndex = Util.indexOf(inputBytes, 0, bytesRead, "/");
-            int endIndex = Util.indexOf(inputBytes, 0, bytesRead, " HTTP");
+            int startIndex = indexOf(inputBytes, 0, bytesRead, "/");
+            int endIndex = indexOf(inputBytes, 0, bytesRead, " HTTP");
             String searchPath=new String(inputBytes, startIndex, endIndex-4);
             proxyUrl = radioList.get(searchPath.toLowerCase());
             if(proxyUrl==null) {
@@ -147,11 +183,10 @@ public class ForwardProxy {
 
             // start decoder when "Range: bytes=0-" is in the request
             boolean needDecoding = false;
-            if(Util.indexOf(inputBytes, 0, bytesRead, "bytes=0-")!=-1) 
-                needDecoding = true;
+            if(indexOf(inputBytes, 0, bytesRead, "bytes=0-")!=-1) needDecoding = true;
             
             // create request and send it to the music service
-            Util.replace(inputBytes, 0, bytesRead, searchPath, proxyUrl.getPath());
+            replace(inputBytes, 0, bytesRead, searchPath, proxyUrl.getPath());
             if(Util.DEBUG) Util.deb(threadId, threadCount, "Req: [" + new String(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1) +"]");
             try {
                 toOS.write(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1);
@@ -172,11 +207,11 @@ public class ForwardProxy {
             }
             
             // limit response to HTTP content
-            int offset=Util.indexOf(inputBytes, 0, bytesRead, "\r\n\r\n");
+            int offset=indexOf(inputBytes, 0, bytesRead, "\r\n\r\n");
 
             // Replace Content-Type info
-            if(Util.replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")==-1)
-                if(Util.replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1)
+            if(replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")==-1)
+                if(replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1)
                     bytesRead-=6;
             if(Util.DEBUG) Util.deb(threadId, threadCount, "Resp: [" + new String(inputBytes, 0, offset) +"]");
             offset+=4; // add the \r\n pairs again
@@ -191,7 +226,7 @@ public class ForwardProxy {
                 // bytesRead contains the total of bytes read last time
                 // offset points to the first byte after the http response; this
                 // is the start of the stream
-                new OggDecoder(this.getId(), proxyUrl.getUrlString(), ioBufferSize).
+                new OggDecoder(this.getId(), proxyUrl, ioBufferSize).
                         decode(fromOS, inputBytes, offset);
             } else {
                 // Write till sreamer closes socket. 
@@ -297,7 +332,7 @@ public class ForwardProxy {
                         return INVALID_PORT;
                     }
                     break;
-                case "logfile_size":
+                case "logfile_size_kb":
                     try {
                         logfileSizeKb=Integer.parseInt(value);
                     } catch(NumberFormatException e) {
