@@ -1,12 +1,9 @@
-// AAC: http://mscp3.live-streams.nl:8340/jazz-high.aac
-// MP3: http://mscp3.live-streams.nl:8340/jazz-low.mp3
-// FLAC: http://stream.radioparadise.com/flac
-// FLAC: http://mscp2.live-streams.nl:8100/flac.flac // HiOline
-// FLAC: http://mscp3.live-streams.nl:8340/jazz-flac.flac  // NAIM
-// FLAC: http://icecast3.streamserver24.com:18800/motherearth  // 24 bit
-// FLAC: http://thecheese.ddns.net:8004/stream // 16 bit
-// OCI: http://158.101.168.33:9500/
-// https://github.com/ymnk/jorbis to decode ogg
+    /*
+    Version      | Comment
+    -------------+--------------------------------------------------------------
+    1.0.040321   | Initial final release
+    -------------+--------------------------------------------------------------
+    */
 
 package be.forwardproxy;
 
@@ -23,7 +20,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V0.9.010321";
+    private final static String APP_VERSION = "ForwardProxy V0.9.040321";
     private final static String UNDERLINE =   "========================";
 
     public static int threadCount;
@@ -45,7 +42,7 @@ public class ForwardProxy {
     public final static int CANNOT_PARSE_CONFIG_FILE=9;
     public final static int MISSING_PORT = 10;
     
-    public final static int IO_BUFFER_SIZE_KB = 384;
+    public final static int IO_BUFFER_SIZE_KB = 8;
     public final static int SOCKET_TIMEOUT_MS = 2000;
     
     private class RequestHandler extends Thread {
@@ -85,6 +82,8 @@ public class ForwardProxy {
             int fromLen=fromStr.length();
             byte[] toStrArr = toStr.getBytes();
 
+            // arraycopy​(Object src, int srcPos, Object dest, int destPos, int length)
+            
             // copy remaining bytes form source to array
             System.arraycopy(byteArr, index+fromLen, byteArr, 
                     index+toStrArr.length, end-fromLen-index);
@@ -131,16 +130,18 @@ public class ForwardProxy {
             }
 
             // check for valid request before continuing
+            // if request contains no "Icy-MetaData: 1", reject it
             if(indexOf(inputBytes, 0, bytesRead, "Icy-MetaData: 1")==-1) {
                 Util.log(threadId, threadCount, "Bad request");
                 closeConnections();
                 return;
             }
 
-            // get searchPath from request
+            // get searchPath from request. This is the key in the station list
             int startIndex = indexOf(inputBytes, 0, bytesRead, "/");
             int endIndex = indexOf(inputBytes, 0, bytesRead, " HTTP");
             String searchPath=new String(inputBytes, startIndex, endIndex-4);
+            if(Util.DEBUG) Util.deb(threadId, threadCount, "searchPath: " + searchPath);
             proxyUrl = radioList.get(searchPath.toLowerCase());
             if(proxyUrl==null) {
                 Util.log(threadId, threadCount, "Invalid search path: [" + searchPath + "]");
@@ -183,11 +184,13 @@ public class ForwardProxy {
 
             // start decoder when "Range: bytes=0-" is in the request
             boolean needDecoding = false;
+            // below is naim specific. It avoid starting multiple time the ffmpeg process
             if(indexOf(inputBytes, 0, bytesRead, "bytes=0-")!=-1) needDecoding = true;
             
             // create request and send it to the music service
             replace(inputBytes, 0, bytesRead, searchPath, proxyUrl.getPath());
-            if(Util.DEBUG) Util.deb(threadId, threadCount, "Req: [" + new String(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1) +"]");
+            bytesRead = bytesRead + proxyUrl.getPath().length() - searchPath.length();
+            if(Util.DEBUG) Util.deb(threadId, threadCount, "Req: [" + new String(inputBytes, 0, bytesRead)+"]");
             try {
                 toOS.write(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1);
             } catch (IOException ex) {
@@ -213,8 +216,10 @@ public class ForwardProxy {
             if(replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")==-1)
                 if(replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1)
                     bytesRead-=6;
-            if(Util.DEBUG) Util.deb(threadId, threadCount, "Resp: [" + new String(inputBytes, 0, offset) +"]");
+/*            if(replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")!=-1) bytesRead+=0;
+            else if(replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1) bytesRead-=6;*/
             offset+=4; // add the \r\n pairs again
+            if(Util.DEBUG) Util.deb(threadId, threadCount, "Resp: [" + new String(inputBytes, 0, offset) +"]");
 
             // if decode request, pass on to decoder
             if(needDecoding) {
@@ -251,8 +256,6 @@ public class ForwardProxy {
             closeConnections();
         }
     }
-
-    
     
     private int createForwardProxyServer(int forwardProxyPort) {
         // Create the Server Socket for the Proxy
@@ -260,7 +263,7 @@ public class ForwardProxy {
         try {
             forwardProxyServerSocket = new ServerSocket(forwardProxyPort);
         } catch (IOException ex) {
-            Util.log("Failed to create ForwardProxy on port [" + forwardProxyPort + "]: "
+            Util.log("Failed to bind ForwardProxy to port " + forwardProxyPort + ": "
                     + ex.getMessage());
             return PROXY_SERVER_CREATION_FAILED;
         }
@@ -275,20 +278,6 @@ public class ForwardProxy {
             }
         }
     }
-
-    /*public int start2(String[] args) {
-        try {
-            FileOutputStream fos = new FileOutputStream("fons.flac");
-            byte[] bytes = new byte[IO_BUFFER_SIZE];
-            OggDecoder dec = new OggDecoder(-1);
-            dec.decode(fos, bytes);
-            fos.close();
-        } catch (Exception ex) {
-            Util.log("Fout! " + ex);
-        }
-        return 0;
-    }*/
-    
 
     private int readConfiguration(String configFile ) {
         Path path = Paths.get(configFile);
@@ -371,7 +360,7 @@ public class ForwardProxy {
                                 proxyUrl.getUrlString() + "]");
                     } else {
                         radioList.put(key.toLowerCase(), proxyUrl);
-                        Util.log("Found " + friendlyName);
+                        Util.log("Added " + friendlyName);
                     }
                     break;
             }
@@ -415,6 +404,21 @@ public class ForwardProxy {
         return createForwardProxyServer(forwardProxyPort);
     }
 
+/*    public int start2(String[] args) {
+        try {
+            Util.DEBUG=true;
+            ProxyURL proxyUrl = new ProxyURL("http://secure.live-streams.nl/flac.flac", "Intense Radio");
+//            ProxyURL proxyUrl = new ProxyURL("http://mscp3.live-streams.nl:8250/class-flac.flac", "Naim Classic");
+            FileOutputStream fos = new FileOutputStream("fons.out");
+            byte[] bytes = new byte[4096];
+            OggDecoder dec = new OggDecoder(-1, proxyUrl, 4096);
+            dec.decode(fos, bytes, 0);
+            fos.close();
+        } catch (Exception ex) {
+            Util.log("Fout! " + ex);
+        }
+        return 0;
+    }*/
     
     public static void main(String[] args) {
         System.exit(new ForwardProxy().start(args));

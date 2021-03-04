@@ -58,7 +58,7 @@ public class Util {
         sBuf.setLength(0);
         sBuf.append(dateFormatter.format(new Date()));
         if(threadId!=-1) 
-            sBuf.append('[').append(threadId).append("]:[").append(threadCount).append("] ");
+            sBuf.append('[').append(threadId).append(':').append(threadCount).append("] ");
         sBuf.append(logInfo);
         String msg = sBuf.toString();
         System.out.println(msg);
