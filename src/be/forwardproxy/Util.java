@@ -13,13 +13,13 @@ public class Util {
     public final static int LOGFILE_SIZE_KB = 1024;
     public final static int LOGFILE_COUNT = 2;
     private static final SimpleDateFormat dateFormatter = new SimpleDateFormat("dd/MM HH:mm:ss ");
-    private static StringBuffer sBuf = new StringBuffer();
+    private static final StringBuffer sBuf = new StringBuffer();
     private static Logger logger;
     
     private static class LogFileFormatter extends java.util.logging.Formatter {
         @Override
         public String format(LogRecord record) {
-            return record.getMessage() + "\n";
+            return record.getMessage() + '\n';
         }
     }
     

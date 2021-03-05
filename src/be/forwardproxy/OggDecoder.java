@@ -1,12 +1,9 @@
 /*¨
   16 bit: ffmpeg -nostats -loglevel 0 -f ogg -i $1 -f wav -
   16/24 bit: wget -qO- $1|flac -d --totally-silent --ogg -c -|ffmpeg -nostats -loglevel 0 -f wav -i - -c:a copy -f wav -
-
-  Intense radio: http://secure.live-streams.nl/flac.flac
   See: https://stackoverflow.com/questions/56138370/problems-piping-ffmpeg-to-flac-encoder
 
   URLs:
-  AAC: http://mscp3.live-streams.nl:8340/jazz-high.aac
   MP3: http://mscp3.live-streams.nl:8340/jazz-low.mp3
   FLAC: http://stream.radioparadise.com/flac
   FLAC: http://mscp2.live-streams.nl:8100/flac.flac // HiOline
@@ -17,8 +14,6 @@
   OCI: http://158.101.168.33:9500/
   https://github.com/ymnk/jorbis to decode ogg
 */
-
-
 
 package be.forwardproxy;
 
@@ -60,8 +55,8 @@ public class OggDecoder {
         try {         
             p = pb.start();
         } catch (IOException ex) {
-            Util.log(threadId, ForwardProxy.threadCount, "OggDecoder: Cannot start ffmpeg process: " + ex.getMessage());
-            System.exit(ForwardProxy.CANNOT_START_FFMPEG);
+            Util.log(threadId, ForwardProxy.threadCount, "OggDecoder: Cannot start decode script: " + ex.getMessage());
+            System.exit(ForwardProxy.CANNOT_START_DECODE_SCRIPT);
         }
         
         int bytesRead;

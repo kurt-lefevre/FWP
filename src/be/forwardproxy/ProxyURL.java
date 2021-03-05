@@ -55,9 +55,4 @@ public class ProxyURL {
     public String getUrlString() {
         return urlString;
     }
-
-    @Override
-    public String toString() {
-        return urlString ;
-    }
 }

@@ -1,9 +1,9 @@
-    /*
+/*
     Version      | Comment
     -------------+--------------------------------------------------------------
-    1.0.040321   | Initial final release
+    1.0.050321   | Initial final release
     -------------+--------------------------------------------------------------
-    */
+*/
 
 package be.forwardproxy;
 
@@ -20,7 +20,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V0.9.040321";
+    private final static String APP_VERSION = "ForwardProxy V1.0.050321";
     private final static String UNDERLINE =   "========================";
 
     public static int threadCount;
@@ -36,11 +36,12 @@ public class ForwardProxy {
     public final static int PROXY_SERVER_CREATION_FAILED = 3;
     public final static int HTTPS_NOT_SUPPORTED = 4;
     public final static int REQUEST_DISPATCH_FAILED = 5;
-    public final static int CANNOT_START_FFMPEG = 6;
+    public final static int CANNOT_START_DECODE_SCRIPT = 6;
     public final static int MALFORMED_URL = 7;
     public final static int CANNOT_READ_CONFIG_FILE=8;
     public final static int CANNOT_PARSE_CONFIG_FILE=9;
     public final static int MISSING_PORT = 10;
+    public final static int NO_STATIONS_DEFINED = 11;
     
     public final static int IO_BUFFER_SIZE_KB = 8;
     public final static int SOCKET_TIMEOUT_MS = 2000;
@@ -132,7 +133,7 @@ public class ForwardProxy {
             // check for valid request before continuing
             // if request contains no "Icy-MetaData: 1", reject it
             if(indexOf(inputBytes, 0, bytesRead, "Icy-MetaData: 1")==-1) {
-                Util.log(threadId, threadCount, "Bad request");
+                Util.log(threadId, threadCount, "Evil request");
                 closeConnections();
                 return;
             }
@@ -268,7 +269,7 @@ public class ForwardProxy {
             return PROXY_SERVER_CREATION_FAILED;
         }
         
-        Util.log("Listening...");
+        Util.log("Listening for requests on port " + forwardProxyPort);
         while(true) {
             try {
                 new RequestHandler(forwardProxyServerSocket.accept()).start();
@@ -279,21 +280,48 @@ public class ForwardProxy {
         }
     }
 
+    private int postValidation() {
+        // post checks
+        if(forwardProxyPort==0) {
+            Util.log("Missing PORT in configuration file");
+            return MISSING_PORT;
+        }
+        
+        // display radio station list
+        if(radioList.isEmpty()) {
+            Util.log("No stations defined");
+            return NO_STATIONS_DEFINED;
+        }
+        
+        return SUCCESS;
+    }
+    
+    private void dispStartup() {
+        Util.log("Logfile size: " + logfileSizeKb + " kB");
+        Util.log("I/O Buffer size: " + ioBufferSize/1024 + " kB");
+        Util.log("");
+        Util.log("Stations");
+        Util.log("--------");
+        for (ProxyURL station : radioList.values()) {
+            Util.log("  " + station.getFriendlyName());
+        }
+        Util.log("");
+    }
+    
     private int readConfiguration(String configFile ) {
         Path path = Paths.get(configFile);
         Stream<String> fileLines = null;
         try {
             fileLines = Files.lines(path);
-            Util.log("Read " + configFile);
+            //Util.log("Read " + configFile);
         } catch (IOException ex) {
-            Util.log("Can't read [" + configFile + "]");
+            Util.log("Can't find [" + configFile + "]");
             return CANNOT_READ_CONFIG_FILE;
         }
         radioList = new HashMap<>();
         Iterator<String> fileLinesIt = fileLines.iterator();
-        String line;
         String[] oneLine;
-        String key, value, forwardUrl, friendlyName;
+        String line, key, value, forwardUrl, friendlyName, searchPath;
         ProxyURL proxyUrl;
         while(fileLinesIt.hasNext()) {
             line = fileLinesIt.next();
@@ -344,34 +372,29 @@ public class ForwardProxy {
                         Util.log("Can't convert DEBUG [" + value + "]. Assuming false");
                     }
                     break;
-                default:
+                case "station":
                     // station
                     oneLine = value.split(",");
-                    if(oneLine.length!=2) {
-                        Util.log("Can't parse [" + value + "]");
+                    if(oneLine.length!=3) {
+                        Util.log("Can't parse line for STATION [" + value + "]");
                         break;
                     }
 
-                    friendlyName = oneLine[0].trim();
-                    forwardUrl = oneLine[1].trim();
+                    searchPath = oneLine[0].trim();
+                    friendlyName = oneLine[1].trim();
+                    forwardUrl = oneLine[2].trim();
                     proxyUrl = new ProxyURL(forwardUrl, friendlyName);
                     if(!proxyUrl.getProtocol().equals("http")) {
                         Util.log("HTTPS URLs are not supported: [" + 
                                 proxyUrl.getUrlString() + "]");
-                    } else {
-                        radioList.put(key.toLowerCase(), proxyUrl);
-                        Util.log("Added " + friendlyName);
-                    }
+                    } else radioList.put('/' + searchPath.toLowerCase(), proxyUrl);
+                    break;
+                default:
+                    Util.log("Don't understand [" + value + "]");
                     break;
             }
         }
         try{ fileLines.close(); } catch(Exception e) {}
-        
-        // post checks
-        if(forwardProxyPort==0) {
-            Util.log("Missing PORT in configuration file");
-            return MISSING_PORT;
-        }
         
         return SUCCESS;
     }
@@ -394,11 +417,13 @@ public class ForwardProxy {
         
         // init logging 
         Util.initializeLogger("ForwardProxy_", logfileSizeKb);
+        
+        // do post check validation of values
+        retVal = postValidation();
+        if(retVal!=SUCCESS) return retVal;
 
         // Arguments parsed successfully
-        Util.log("ForwardProxy port: " + forwardProxyPort);
-        Util.log("Logfile size: " + logfileSizeKb + " KB");
-        Util.log("I/O Buffer size: " + ioBufferSize/1024 + " KB");
+        dispStartup();
         
         // start proxyserver
         return createForwardProxyServer(forwardProxyPort);
