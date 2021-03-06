@@ -1,7 +1,7 @@
 /*
     Version      | Comment
     -------------+--------------------------------------------------------------
-    1.0.050321   | Initial final release
+    1.0.060321   | Initial release
     -------------+--------------------------------------------------------------
 */
 
@@ -15,19 +15,22 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.0.050321";
+    private final static String APP_VERSION = "ForwardProxy V1.0.060321";
     private final static String UNDERLINE =   "========================";
 
-    public static int threadCount;
+    private final ProxyLog logger = ProxyLog.getInstance();
     private int forwardProxyPort;  // listening port for ForwardProxy server
-    private int logfileSizeKb = Util.LOGFILE_SIZE_KB;
     private int ioBufferSize = IO_BUFFER_SIZE_KB * 1024;
     private HashMap<String, ProxyURL> radioList;
+    private long bootTime;
+    private String bootTimeStr;
     
     // exit statuses
     public final static int SUCCESS = 0;
@@ -44,7 +47,7 @@ public class ForwardProxy {
     public final static int NO_STATIONS_DEFINED = 11;
     
     public final static int IO_BUFFER_SIZE_KB = 8;
-    public final static int SOCKET_TIMEOUT_MS = 2000;
+    public final static int SOCKET_TIMEOUT_MS = 1000;
     
     private class RequestHandler extends Thread {
         private final Socket socket;
@@ -103,29 +106,62 @@ public class ForwardProxy {
             try { fromIS.close(); } catch (Exception ex) {};
             try { fromOS.close(); } catch (Exception ex) {};
 
-            Util.log(threadId, --threadCount, "Stop thread");
+            logger.adjustThreadCount(-1);
+            logger.log(threadId, "Stop thread");
         }
 
         public void run() {
-            Util.log(threadId, ++threadCount, "Start thread");
+            logger.adjustThreadCount(1);
+            logger.log(threadId, "Start thread");
             // get client inputstream
             try {
                 socket.setSoTimeout(SOCKET_TIMEOUT_MS);
                 fromIS = socket.getInputStream();
             } catch (IOException ex) {
-                Util.log(threadId, threadCount, "Failed to connect to Client Input Stream: "
+                logger.log(threadId, "Failed to connect to Client Input Stream: "
                         + ex.getMessage());
                 closeConnections();
                 return;
             }
 
+            // get client outputstream
+            try {
+                fromOS = socket.getOutputStream();
+            } catch (IOException ex) {
+                logger.log(threadId, "Failed to connect to Client Output Stream: "
+                        + ex.getMessage());
+                closeConnections();
+                return;
+            }
+            
             // read request from streamer
             byte[] inputBytes = new byte[ioBufferSize]; 
             int bytesRead=0;
             try {
                 bytesRead = fromIS.read(inputBytes);
             } catch (IOException ex) {
-                Util.log(threadId, threadCount, "Cannot read incoming request: " + ex.getMessage());
+                logger.log(threadId, "Cannot read incoming request: " + ex.getMessage());
+                closeConnections();
+                return;
+            }
+            
+            // check for special health request
+            if(indexOf(inputBytes, 0, bytesRead, "fwdhealth")!=-1) {
+                if(ProxyLog.DEBUG) logger.deb(threadId, "Health Req: [" 
+                        + new String(inputBytes, 0, bytesRead) +"]");
+                
+                try {
+                    if(indexOf(inputBytes, 0, bytesRead, "GET /favicon.ico")!=-1 ||
+                            indexOf(inputBytes, 0, bytesRead, "GET /apple")!=-1)
+                        fromOS.write("HTTP/1.1 200 OK\r\n\r\n".getBytes());
+                    else {
+                        logger.log(threadId, "Health request");
+                        fromOS.write(showInfo());
+                    }
+                } catch (IOException ex) {
+                    logger.log(threadId, "Failed to send health response to client: "
+                            + ex.getMessage());
+                }
                 closeConnections();
                 return;
             }
@@ -133,7 +169,13 @@ public class ForwardProxy {
             // check for valid request before continuing
             // if request contains no "Icy-MetaData: 1", reject it
             if(indexOf(inputBytes, 0, bytesRead, "Icy-MetaData: 1")==-1) {
-                Util.log(threadId, threadCount, "Evil request");
+                // ProxyLog.log(threadId, threadCount, "Evil request");
+                try {
+                    fromOS.write("HTTP/1.1 404\r\n\r\n".getBytes());
+                } catch (IOException ex) {
+                    logger.log(threadId, "Failed to send 404 response to client: "
+                            + ex.getMessage());
+                }
                 closeConnections();
                 return;
             }
@@ -142,10 +184,10 @@ public class ForwardProxy {
             int startIndex = indexOf(inputBytes, 0, bytesRead, "/");
             int endIndex = indexOf(inputBytes, 0, bytesRead, " HTTP");
             String searchPath=new String(inputBytes, startIndex, endIndex-4);
-            if(Util.DEBUG) Util.deb(threadId, threadCount, "searchPath: " + searchPath);
+            if(ProxyLog.DEBUG) logger.deb(threadId, "searchPath: " + searchPath);
             proxyUrl = radioList.get(searchPath.toLowerCase());
             if(proxyUrl==null) {
-                Util.log(threadId, threadCount, "Invalid search path: [" + searchPath + "]");
+                logger.log(threadId, "Invalid search path: [" + searchPath + "]");
                 closeConnections();
                 return;
             }
@@ -155,29 +197,28 @@ public class ForwardProxy {
                 toSocket = new Socket(proxyUrl.getHost(), proxyUrl.getPort());
                 toSocket.setSoTimeout(SOCKET_TIMEOUT_MS);
             } catch (IOException ex) {
-                Util.log(threadId, threadCount, "Failed to connect to music service [" 
+                logger.log(threadId, "Failed to connect to music service [" 
                         + proxyUrl.getUrlString() + "]: " + ex.getMessage());
                 closeConnections();
                 return;
             }
-            Util.log(threadId, threadCount, "Connected to " + proxyUrl.getFriendlyName());
+            logger.log(threadId, "Connected to " + proxyUrl.getFriendlyName());
 
-            // get outputstreams
+            // get server outputstream
             try {
-                fromOS = socket.getOutputStream();
                 toOS = toSocket.getOutputStream();
             } catch (IOException ex) {
-                Util.log(threadId, threadCount, "Failed to connect to Output Streams: "
+                logger.log(threadId, "Failed to connect to Server Output Streams: "
                         + ex.getMessage());
                 closeConnections();
                 return;
             }
 
-            // get client inputstream
+            // get server inputstream
             try {
                 toIS = toSocket.getInputStream();
             } catch (IOException ex) {
-                Util.log(threadId, threadCount, "Failed to connect to Server Input Stream: "
+                logger.log(threadId, "Failed to connect to Server Input Stream: "
                         + ex.getMessage());
                 closeConnections();
                 return;
@@ -191,11 +232,11 @@ public class ForwardProxy {
             // create request and send it to the music service
             replace(inputBytes, 0, bytesRead, searchPath, proxyUrl.getPath());
             bytesRead = bytesRead + proxyUrl.getPath().length() - searchPath.length();
-            if(Util.DEBUG) Util.deb(threadId, threadCount, "Req: [" + new String(inputBytes, 0, bytesRead)+"]");
+            if(ProxyLog.DEBUG) logger.deb(threadId, "Req: [" + new String(inputBytes, 0, bytesRead)+"]");
             try {
                 toOS.write(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1);
             } catch (IOException ex) {
-                Util.log(threadId, threadCount, "Cannot send request to server: " + ex.getMessage());
+                logger.log(threadId, "Cannot send request to server: " + ex.getMessage());
                 closeConnections();
                 return;
             }
@@ -203,9 +244,9 @@ public class ForwardProxy {
             // read response from music service
             try {
                 bytesRead=toIS.read(inputBytes);
-                if(Util.DEBUG) Util.deb(threadId, threadCount, "bytesRead: " + bytesRead);
+                if(ProxyLog.DEBUG) logger.deb(threadId, "bytesRead: " + bytesRead);
             } catch (IOException ex) {
-                Util.log(threadId, threadCount, "Cannot read server response: " + ex.getMessage());
+                logger.log(threadId, "Cannot read server response: " + ex.getMessage());
                 closeConnections();
                 return;
             }
@@ -220,7 +261,7 @@ public class ForwardProxy {
 /*            if(replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")!=-1) bytesRead+=0;
             else if(replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1) bytesRead-=6;*/
             offset+=4; // add the \r\n pairs again
-            if(Util.DEBUG) Util.deb(threadId, threadCount, "Resp: [" + new String(inputBytes, 0, offset) +"]");
+            if(ProxyLog.DEBUG) logger.deb(threadId, "Resp: [" + new String(inputBytes, 0, offset) +"]");
 
             // if decode request, pass on to decoder
             if(needDecoding) {
@@ -243,13 +284,13 @@ public class ForwardProxy {
                         if(offset==ioBufferSize) {
                             try {
                                 fromOS.write(inputBytes);
-                                if(Util.DEBUG) Util.deb(threadId, threadCount, "Sent buffer to streamer");
+                                if(ProxyLog.DEBUG) logger.deb(threadId, "Sent buffer to streamer");
                             } catch (IOException ex) { break; }
                             offset=0;
                         }
                     } 
                 } catch (IOException ex) { 
-                    Util.log(threadId, threadCount, "Cannot read server response: " + ex.getMessage());
+                    logger.log(threadId, "Cannot read server response: " + ex.getMessage());
                 }
             }
 
@@ -258,23 +299,51 @@ public class ForwardProxy {
         }
     }
     
+    private byte[] showInfo() {
+        long diff = System.currentTimeMillis() - bootTime;
+        StringBuilder sb = new StringBuilder();
+        String uptime = String.format("%d days %02d:%02d:%02d", diff/86400000, 
+                diff/3600000%24,diff/60000%60, diff/1000%60);
+        
+        sb.append(APP_VERSION).append('\n').append(UNDERLINE).append("\n\n").
+            append("Decoders         ").append(logger.getDecoderCount()).append('\n').
+            append("Threads          ").append(logger.getThreadCount()).append('\n').
+            append("Up time          ").append(uptime).append('\n').
+            append("Boot time        ").append(bootTimeStr).append('\n').
+            append("Logfile size     ").append(logger.getLogfileSize()).append(" kB\n").
+            append("I/O buffer size  ").append(ioBufferSize/1024).append(" kB\n\n").
+            append("Stations\n--------\n");
+        for (ProxyURL station : radioList.values()) {
+            sb.append("  ").append(station.getFriendlyName()).append('\n');
+        }
+        sb.append("\nKurt Lefevre (http://linkedin.com/in/lefevrekurt)");
+            
+        String msg = "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=UTF-8\r\nContent-Length: "
+                            + sb.length() + "\r\n\r\n" + sb.toString();
+        return msg.getBytes();
+    }
+    
     private int createForwardProxyServer(int forwardProxyPort) {
+        bootTime = System.currentTimeMillis();
+        SimpleDateFormat calFormatter = new SimpleDateFormat("dd-MM-yyyy 'at' HH:mm:ss");
+        bootTimeStr = calFormatter.format(new Date(bootTime));
+        
         // Create the Server Socket for the Proxy
         ServerSocket forwardProxyServerSocket ;
         try {
             forwardProxyServerSocket = new ServerSocket(forwardProxyPort);
         } catch (IOException ex) {
-            Util.log("Failed to bind ForwardProxy to port " + forwardProxyPort + ": "
+            logger.log("Failed to bind ForwardProxy to port " + forwardProxyPort + ": "
                     + ex.getMessage());
             return PROXY_SERVER_CREATION_FAILED;
         }
         
-        Util.log("Listening for requests on port " + forwardProxyPort);
+        logger.log("Listening for requests on port " + forwardProxyPort);
         while(true) {
             try {
                 new RequestHandler(forwardProxyServerSocket.accept()).start();
             } catch (IOException ex) {
-                Util.log("Failed to dispatch request: " + ex.getMessage());
+                logger.log("Failed to dispatch request: " + ex.getMessage());
                 return REQUEST_DISPATCH_FAILED;
             }
         }
@@ -283,13 +352,13 @@ public class ForwardProxy {
     private int postValidation() {
         // post checks
         if(forwardProxyPort==0) {
-            Util.log("Missing PORT in configuration file");
+            logger.log("Missing PORT in configuration file");
             return MISSING_PORT;
         }
         
         // display radio station list
         if(radioList.isEmpty()) {
-            Util.log("No stations defined");
+            logger.log("No stations defined");
             return NO_STATIONS_DEFINED;
         }
         
@@ -297,15 +366,15 @@ public class ForwardProxy {
     }
     
     private void dispStartup() {
-        Util.log("Logfile size: " + logfileSizeKb + " kB");
-        Util.log("I/O Buffer size: " + ioBufferSize/1024 + " kB");
-        Util.log("");
-        Util.log("Stations");
-        Util.log("--------");
+        logger.log("Logfile size: " + logger.getLogfileSize() + " kB");
+        logger.log("I/O buffer size: " + ioBufferSize/1024 + " kB");
+        logger.log("");
+        logger.log("Stations");
+        logger.log("--------");
         for (ProxyURL station : radioList.values()) {
-            Util.log("  " + station.getFriendlyName());
+            logger.log("  " + station.getFriendlyName());
         }
-        Util.log("");
+        logger.log("");
     }
     
     private int readConfiguration(String configFile ) {
@@ -315,7 +384,7 @@ public class ForwardProxy {
             fileLines = Files.lines(path);
             //Util.log("Read " + configFile);
         } catch (IOException ex) {
-            Util.log("Can't find [" + configFile + "]");
+            logger.log("Can't find [" + configFile + "]");
             return CANNOT_READ_CONFIG_FILE;
         }
         radioList = new HashMap<>();
@@ -332,7 +401,7 @@ public class ForwardProxy {
             //split one line by = 
             oneLine = line.split("=");
             if(oneLine.length!=2) {
-                Util.log("Can't parse [" + line + "]");
+                logger.log("Can't parse [" + line + "]");
                 return CANNOT_READ_CONFIG_FILE;
             }
             
@@ -345,38 +414,38 @@ public class ForwardProxy {
                     try {
                         forwardProxyPort=Integer.parseInt(value);
                     } catch(NumberFormatException e) {
-                        Util.log("Can't parse port [" + value + "]");
+                        logger.log("Can't parse port [" + value + "]");
                         return INVALID_PORT;
                     }
                     break;
                 case "logfile_size_kb":
                     try {
-                        logfileSizeKb=Integer.parseInt(value);
+                        logger.setLogfileSize(Integer.parseInt(value));
                     } catch(NumberFormatException e) {
-                        Util.log("Can't convert LOGFILE_SIZE [" + value + "]. Assuming " +
-                                logfileSizeKb + " KB");
+                        logger.log("Can't convert LOGFILE_SIZE [" + value + "]. Assuming " +
+                                logger.getLogfileSize() + " KB");
                     }
                     break;
                 case "io_buffer_size_kb":
                     try {
                         ioBufferSize=Integer.parseInt(value) * 1024;
                     } catch(NumberFormatException e) {
-                        Util.log("Can't convert IO_BUFFER_SIZE_KB [" + value + "]. Assuming " +
-                                IO_BUFFER_SIZE_KB + " KB");
+                        logger.log("Can't convert IO_BUFFER_SIZE_KB [" + value + "]. Assuming " +
+                            IO_BUFFER_SIZE_KB + " KB");
                     }
                     break;
                 case "debug":
                     try {
-                        Util.DEBUG=Boolean.parseBoolean(value);
+                        ProxyLog.DEBUG=Boolean.parseBoolean(value);
                     } catch(NumberFormatException e) {
-                        Util.log("Can't convert DEBUG [" + value + "]. Assuming false");
+                        logger.log("Can't convert DEBUG [" + value + "]. Assuming false");
                     }
                     break;
                 case "station":
                     // station
                     oneLine = value.split(",");
                     if(oneLine.length!=3) {
-                        Util.log("Can't parse line for STATION [" + value + "]");
+                        logger.log("Can't parse line for STATION [" + value + "]");
                         break;
                     }
 
@@ -385,12 +454,12 @@ public class ForwardProxy {
                     forwardUrl = oneLine[2].trim();
                     proxyUrl = new ProxyURL(forwardUrl, friendlyName);
                     if(!proxyUrl.getProtocol().equals("http")) {
-                        Util.log("HTTPS URLs are not supported: [" + 
+                        logger.log("HTTPS URLs are not supported: [" + 
                                 proxyUrl.getUrlString() + "]");
                     } else radioList.put('/' + searchPath.toLowerCase(), proxyUrl);
                     break;
                 default:
-                    Util.log("Don't understand [" + value + "]");
+                    logger.log("Don't understand [" + value + "]");
                     break;
             }
         }
@@ -408,15 +477,15 @@ public class ForwardProxy {
             return MISSING_ARGUMENTS;
         }
 
-        Util.log(APP_VERSION);
-        Util.log(UNDERLINE);
+        logger.log(APP_VERSION);
+        logger.log(UNDERLINE);
         
         // process configuration
         int retVal=readConfiguration(args[0]);
         if(retVal!=SUCCESS) return retVal;
         
         // init logging 
-        Util.initializeLogger("ForwardProxy_", logfileSizeKb);
+        logger.initializeLogger("ForwardProxy_");
         
         // do post check validation of values
         retVal = postValidation();
@@ -431,7 +500,7 @@ public class ForwardProxy {
 
 /*    public int start2(String[] args) {
         try {
-            Util.DEBUG=true;
+            ProxyLog.DEBUG=true;
             ProxyURL proxyUrl = new ProxyURL("http://secure.live-streams.nl/flac.flac", "Intense Radio");
 //            ProxyURL proxyUrl = new ProxyURL("http://mscp3.live-streams.nl:8250/class-flac.flac", "Naim Classic");
             FileOutputStream fos = new FileOutputStream("fons.out");
@@ -440,7 +509,7 @@ public class ForwardProxy {
             dec.decode(fos, bytes, 0);
             fos.close();
         } catch (Exception ex) {
-            Util.log("Fout! " + ex);
+            ProxyLog.log("Fout! " + ex);
         }
         return 0;
     }*/

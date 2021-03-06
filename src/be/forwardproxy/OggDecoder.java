@@ -26,11 +26,13 @@ public class OggDecoder {
     private final long threadId;
     private final ProxyURL proxyUrl;
     private final int ioBufferSize;
+    private final ProxyLog logger=ProxyLog.getInstance();
 
     public OggDecoder(long threadId, ProxyURL proxyUrl, int ioBufferSize) {
         this.threadId = threadId;
         this.proxyUrl=proxyUrl;
         this.ioBufferSize=ioBufferSize;
+        logger.adjustDecoderCount(1);
     }
 
     private String formatTransferRate(long bytes, long time) {
@@ -55,12 +57,12 @@ public class OggDecoder {
         try {         
             p = pb.start();
         } catch (IOException ex) {
-            Util.log(threadId, ForwardProxy.threadCount, "OggDecoder: Cannot start decode script: " + ex.getMessage());
+            logger.log(threadId, "OggDecoder: Cannot start decode script: " + ex.getMessage());
             System.exit(ForwardProxy.CANNOT_START_DECODE_SCRIPT);
         }
         
         int bytesRead;
-        Util.log(threadId, ForwardProxy.threadCount, "Start OggDecoder for " + proxyUrl.getFriendlyName());
+        logger.log(threadId, "Start OggDecoder for " + proxyUrl.getFriendlyName());
         InputStream pIS = p.getInputStream();
 
         long totalBytes=0;
@@ -73,10 +75,10 @@ public class OggDecoder {
                     try {
                         os.write(inputBytes);
                         totalBytes += ioBufferSize;
-                        if(Util.DEBUG) Util.deb(threadId, ForwardProxy.threadCount, "OggDecoder: Sent buffer to streamer");
+                        if(ProxyLog.DEBUG) logger.deb(threadId, "OggDecoder: Sent buffer to streamer");
                     } catch (SocketException ex) {  //ex.printStackTrace();
                         totalTime=System.nanoTime() - startTime;
-                        if(Util.DEBUG) Util.deb(threadId, ForwardProxy.threadCount, "OggDecoder: Stream stopped: "
+                        if(ProxyLog.DEBUG) logger.deb(threadId, "OggDecoder: Stream stopped: "
                             + ex.getMessage());
                         break;
                     }
@@ -84,12 +86,13 @@ public class OggDecoder {
                 }
             }
         } catch (Exception ex) {
-            Util.log(threadId, ForwardProxy.threadCount, "OggDecoder: Cannot read server response: " + ex.getMessage());
+            logger.log(threadId, "OggDecoder: Cannot read server response: " + ex.getMessage());
         }
 
         // Stop process
         p.destroy();
-        Util.log(threadId, ForwardProxy.threadCount, "Stop OggDecoder for " + 
-                proxyUrl.getFriendlyName() + formatTransferRate(totalBytes, totalTime));
+        logger.adjustDecoderCount(-1);
+        logger.log(threadId, "Stop OggDecoder for " + proxyUrl.getFriendlyName() + 
+                formatTransferRate(totalBytes, totalTime));
     }
 }
