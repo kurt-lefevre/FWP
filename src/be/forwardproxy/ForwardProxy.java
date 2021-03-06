@@ -4,6 +4,7 @@
     1.0.060321   | Initial release
     1.1.070321   | Added searchpath in showInfo()
     1.2.070321   | Improved debugging of incoming requests
+    1.3.070321   | Sorted radio stations when displaying them
     -------------+--------------------------------------------------------------
 */
 
@@ -18,19 +19,23 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.2.070321";
+    private final static String APP_VERSION = "ForwardProxy V1.3.070321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
     private int forwardProxyPort;  // listening port for ForwardProxy server
     private int ioBufferSize = IO_BUFFER_SIZE_KB * 1024;
     private HashMap<String, ProxyURL> radioList;
+    private ArrayList<ProxyURL> radioListSorted;
     private long bootTime;
     private String bootTimeStr;
     
@@ -50,6 +55,13 @@ public class ForwardProxy {
     
     public final static int IO_BUFFER_SIZE_KB = 8;
     public final static int SOCKET_TIMEOUT_MS = 1000;
+    
+    public static Comparator<ProxyURL> FRIENDLY_NAME_COMPARATOR = new Comparator<ProxyURL>() {         
+        @Override         
+        public int compare(ProxyURL proxyUrl1, ProxyURL proxyUrl2) { 
+            return proxyUrl1.getFriendlyName().compareTo(proxyUrl2.getFriendlyName());
+        }
+    };
     
     private class RequestHandler extends Thread {
         private final Socket socket;
@@ -314,7 +326,7 @@ public class ForwardProxy {
             append("Logfile size     ").append(logger.getLogfileSize()).append(" kB\n").
             append("I/O buffer size  ").append(ioBufferSize/1024).append(" kB\n\n").
             append("Stations\n--------\n");
-        for (ProxyURL station : radioList.values()) {
+        for(ProxyURL station : radioListSorted) {
             sb.append("  ").append(station.getFriendlyName()).append(" (").
                     append(station.getSearchPath()).append(")\n");
         }
@@ -363,7 +375,13 @@ public class ForwardProxy {
             logger.log("No stations defined");
             return NO_STATIONS_DEFINED;
         }
-        
+    
+        // Create sorted station list
+        radioListSorted = new ArrayList<ProxyURL>();
+        for (ProxyURL station : radioList.values()) 
+            radioListSorted.add(station);
+        Collections.sort(radioListSorted, FRIENDLY_NAME_COMPARATOR);
+
         return SUCCESS;
     }
     
@@ -373,7 +391,7 @@ public class ForwardProxy {
         logger.log("");
         logger.log("Stations");
         logger.log("--------");
-        for (ProxyURL station : radioList.values()) {
+        for(ProxyURL station : radioListSorted) {
             logger.log("  " + station.getFriendlyName());
         }
         logger.log("");
