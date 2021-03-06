@@ -3,6 +3,7 @@
     -------------+--------------------------------------------------------------
     1.0.060321   | Initial release
     1.1.070321   | Added searchpath in showInfo()
+    1.2.070321   | Improved debugging of incoming requests
     -------------+--------------------------------------------------------------
 */
 
@@ -23,7 +24,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.1.070321";
+    private final static String APP_VERSION = "ForwardProxy V1.2.070321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -145,12 +146,11 @@ public class ForwardProxy {
                 closeConnections();
                 return;
             }
+            if(ProxyLog.DEBUG) logger.deb(threadId, "Req: [" + new String(inputBytes, 0, bytesRead)+"]");
             
             // check for special health request
             if(indexOf(inputBytes, 0, bytesRead, "fwdhealth")!=-1) {
-                if(ProxyLog.DEBUG) logger.deb(threadId, "Health Req: [" 
-                        + new String(inputBytes, 0, bytesRead) +"]");
-                
+                if(ProxyLog.DEBUG) logger.deb(threadId, "Health request");
                 try {
                     if(indexOf(inputBytes, 0, bytesRead, "GET /favicon.ico")!=-1 ||
                             indexOf(inputBytes, 0, bytesRead, "GET /apple")!=-1)
@@ -233,7 +233,7 @@ public class ForwardProxy {
             // create request and send it to the music service
             replace(inputBytes, 0, bytesRead, searchPath, proxyUrl.getPath());
             bytesRead = bytesRead + proxyUrl.getPath().length() - searchPath.length();
-            if(ProxyLog.DEBUG) logger.deb(threadId, "Req: [" + new String(inputBytes, 0, bytesRead)+"]");
+            if(ProxyLog.DEBUG) logger.deb(threadId, "Req to send: [" + new String(inputBytes, 0, bytesRead)+"]");
             try {
                 toOS.write(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1);
             } catch (IOException ex) {
