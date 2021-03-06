@@ -9,11 +9,13 @@ public class ProxyURL {
     private int port;
     private final String urlString;
     private final String friendlyName;
+    private final String searchPath;
     private final String protocol;
 
-    public ProxyURL(String urlString, String friendlyName) {
-        this.urlString = urlString.strip();
+    public ProxyURL(String urlString, String friendlyName, String searchPath) {
+        this.urlString = urlString;
         this.friendlyName=friendlyName;
+        this.searchPath=searchPath;
 
         URL url=null;
         try {
@@ -32,6 +34,10 @@ public class ProxyURL {
         protocol=url.getProtocol();
     }
 
+    public String getSearchPath() {
+        return searchPath;
+    }
+    
     public String getFriendlyName() {
         return friendlyName;
     }

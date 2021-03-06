@@ -2,6 +2,7 @@
     Version      | Comment
     -------------+--------------------------------------------------------------
     1.0.060321   | Initial release
+    1.1.070321   | Added searchpath in showInfo()
     -------------+--------------------------------------------------------------
 */
 
@@ -22,7 +23,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.0.060321";
+    private final static String APP_VERSION = "ForwardProxy V1.1.070321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -314,7 +315,8 @@ public class ForwardProxy {
             append("I/O buffer size  ").append(ioBufferSize/1024).append(" kB\n\n").
             append("Stations\n--------\n");
         for (ProxyURL station : radioList.values()) {
-            sb.append("  ").append(station.getFriendlyName()).append('\n');
+            sb.append("  ").append(station.getFriendlyName()).append(" (").
+                    append(station.getSearchPath()).append(")\n");
         }
         sb.append("\nKurt Lefevre (http://linkedin.com/in/lefevrekurt)");
             
@@ -449,10 +451,10 @@ public class ForwardProxy {
                         break;
                     }
 
-                    searchPath = oneLine[0].trim();
-                    friendlyName = oneLine[1].trim();
-                    forwardUrl = oneLine[2].trim();
-                    proxyUrl = new ProxyURL(forwardUrl, friendlyName);
+                    searchPath = oneLine[0].strip();
+                    friendlyName = oneLine[1].strip();
+                    forwardUrl = oneLine[2].strip();
+                    proxyUrl = new ProxyURL(forwardUrl, friendlyName, searchPath);
                     if(!proxyUrl.getProtocol().equals("http")) {
                         logger.log("HTTPS URLs are not supported: [" + 
                                 proxyUrl.getUrlString() + "]");
