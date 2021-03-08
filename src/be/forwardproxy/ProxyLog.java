@@ -1,5 +1,6 @@
 package be.forwardproxy;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.logging.FileHandler;
@@ -12,6 +13,8 @@ public class ProxyLog {
     private int logfileSizeKb = 1024;
     private static final int LOGFILE_COUNT = 2;
     private static final SimpleDateFormat dateFormatter = new SimpleDateFormat("dd/MM HH:mm:ss ");
+    private static final String applicationDir = new File(ProxyLog.class.getProtectionDomain().
+                getCodeSource().getLocation().getPath()).getParent() + '/';
     private final StringBuffer sBuf = new StringBuffer();
     private static Logger logger;
     private static ProxyLog proxyLogInstance;
@@ -30,6 +33,10 @@ public class ProxyLog {
         public String format(LogRecord record) {
             return record.getMessage() + '\n';
         }
+    }
+
+    public String getApplicationDir() {
+        return applicationDir;
     }
 
     public void setLogfileSize(int logfileSize) {
@@ -59,11 +66,11 @@ public class ProxyLog {
     public void initializeLogger(String logfileName){
         if(logger!=null) return; // we do it only once
         logger = Logger.getLogger(ProxyLog.class.getName());
-
+        
         // add own handler
         FileHandler handler=null;
         try {
-            handler = new FileHandler(logfileName + "%g.log",
+            handler = new FileHandler(applicationDir + logfileName + "%g.log",
                     logfileSizeKb * 1024, LOGFILE_COUNT, true);
         } catch (Exception ex) {
             log("Failed to initialize logger");

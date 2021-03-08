@@ -358,7 +358,7 @@ public class ForwardProxy {
 /*            if(replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")!=-1) bytesRead+=0;
             else if(replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1) bytesRead-=6;*/
             offset+=4; // add the \r\n pairs again
-            if(ProxyLog.DEBUG) logger.deb(threadId, "Resp: [" + new String(inputBytes, 0, offset) +"]");
+            if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: Resp: [" + new String(inputBytes, 0, offset) +"]");
 
             // if decode request, pass on to decoder
             if(needDecoding) {

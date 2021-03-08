@@ -25,7 +25,8 @@ import java.net.SocketException;
 public class OggDecoder {
     private final ProxyURL proxyUrl;
     private final int ioBufferSize;
-    private final ProxyLog logger=ProxyLog.getInstance();
+    private static final ProxyLog logger=ProxyLog.getInstance();
+    private static final String DECODE_SCRIPT = logger.getApplicationDir()+"decode.sh";
     private long totalBytes;
     private final long threadId;
     private OutputStream os;
@@ -96,7 +97,7 @@ public class OggDecoder {
     
     public void decode(byte[] inputBytes, int streamOffset) {
 //      ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-f", "ogg", "-i", proxyUrl.getUrlString(), "-f", "wav", "-map_metadata", "0",  "-id3v2_version", "3", "-");
-        ProcessBuilder pb = new ProcessBuilder("./decode.sh", proxyUrl.getUrlString());
+        ProcessBuilder pb = new ProcessBuilder(DECODE_SCRIPT, proxyUrl.getUrlString());
         pb.redirectError(ProcessBuilder.Redirect.DISCARD);
         Process p=null;
         try {         
