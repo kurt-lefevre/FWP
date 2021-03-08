@@ -33,7 +33,7 @@ public class ForwardProxy {
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
-    private int forwardProxyPort;  // listening port for ForwardProxy server
+    private int forwardProxyPort, monitorPort;  
     private int ioBufferSize = IO_BUFFER_SIZE_KB * 1024;
     private HashMap<String, ProxyURL> radioList;
     private ArrayList<ProxyURL> radioListSorted;
@@ -63,6 +63,108 @@ public class ForwardProxy {
             return proxyUrl1.getFriendlyName().compareTo(proxyUrl2.getFriendlyName());
         }
     };
+
+    private class MonitorHandler extends Thread {
+        private final Socket socket;
+        private final long threadId= this.getId();
+        private InputStream is;
+        private OutputStream os;
+
+        public MonitorHandler(Socket socket) {
+            this.socket = socket;
+        }
+
+        private int indexOf(byte[] byteArr, int start, int end, String searchStr) {
+            byte[] searchArr=searchStr.getBytes();
+            int lastPos=end - searchArr.length;
+
+            if(lastPos<0) return -1; // search string is longer than array
+
+            int y;
+            for(int x=start; x<=lastPos; x++) {
+                for(y=0; y<searchArr.length; y++)
+                    if(byteArr[x]==searchArr[y]) x++;
+                    else break;
+                if(y==searchArr.length) return x-y;
+            }
+
+            return -1;
+        }
+        
+        public void run() {
+            logger.adjustThreadCount(1);
+            logger.log(threadId, "MonitorHandler: Start");
+            // get  inputstream
+            try {
+                socket.setSoTimeout(SOCKET_TIMEOUT_MS);
+                is = socket.getInputStream();
+            } catch (IOException ex) {
+                logger.log(threadId, "MonitorHandler: Failed to connect to Input Stream: "
+                        + ex.getMessage());
+                closeConnections();
+                return;
+            }
+
+            // get  outputstream
+            try {
+                os = socket.getOutputStream();
+            } catch (IOException ex) {
+                logger.log(threadId, "MonitorHandler: Failed to connect to Output Stream: "
+                        + ex.getMessage());
+                closeConnections();
+                return;
+            }
+            
+            // read request from streamer
+            byte[] inputBytes = new byte[ioBufferSize]; 
+            int bytesRead=0;
+            try {
+                bytesRead = is.read(inputBytes);
+            } catch (IOException ex) {
+                logger.log(threadId, "MonitorHandler: Cannot read request: " + ex.getMessage());
+                closeConnections();
+                return;
+            }
+            if(ProxyLog.DEBUG) logger.deb(threadId, "MonitorHandler: Req: [" + new String(inputBytes, 0, bytesRead)+"]");
+            
+            // check for special health request
+            if(indexOf(inputBytes, 0, bytesRead, "fwdhealth")!=-1) {
+                if(ProxyLog.DEBUG) logger.deb(threadId, "MonitorHandler: Health request");
+                try {
+                    if(indexOf(inputBytes, 0, bytesRead, "GET /favicon.ico")!=-1 ||
+                            indexOf(inputBytes, 0, bytesRead, "GET /apple")!=-1)
+                        os.write("HTTP/1.1 200 OK\r\n\r\n".getBytes());
+                    else {
+                        logger.log(threadId, "MonitorHandler: Health request");
+                        os.write(showInfo());
+                    }
+                } catch (IOException ex) {
+                    logger.log(threadId, "MonitorHandler: Failed to send health response: "
+                            + ex.getMessage());
+                }
+            } else {
+                // ProxyLog.log(threadId, threadCount, "Evil request");
+                try {
+                    os.write("HTTP/1.1 404\r\n\r\n".getBytes());
+                } catch (IOException ex) {
+                    logger.log(threadId, "MonitorHandler: Failed to send 404 response: "
+                            + ex.getMessage());
+                }
+                
+            }
+            
+            closeConnections();
+        }
+
+        private void closeConnections() {
+            try { socket.close(); } catch (Exception ex) {};
+            try { is.close(); } catch (Exception ex) {};
+            try { os.close(); } catch (Exception ex) {};
+
+            logger.adjustThreadCount(-1);
+            logger.log(threadId, "MonitorHandler: Stop");
+        }
+    }
     
     private class RequestHandler extends Thread {
         private final Socket socket;
@@ -122,18 +224,18 @@ public class ForwardProxy {
             try { fromOS.close(); } catch (Exception ex) {};
 
             logger.adjustThreadCount(-1);
-            logger.log(threadId, "Stop thread");
+            logger.log(threadId, "RequestHandler: Stop");
         }
 
         public void run() {
             logger.adjustThreadCount(1);
-            logger.log(threadId, "Start thread");
+            logger.log(threadId, "RequestHandler: Start");
             // get client inputstream
             try {
                 socket.setSoTimeout(SOCKET_TIMEOUT_MS);
                 fromIS = socket.getInputStream();
             } catch (IOException ex) {
-                logger.log(threadId, "Failed to connect to Client Input Stream: "
+                logger.log(threadId, "RequestHandler: Failed to connect to Client Input Stream: "
                         + ex.getMessage());
                 closeConnections();
                 return;
@@ -143,7 +245,7 @@ public class ForwardProxy {
             try {
                 fromOS = socket.getOutputStream();
             } catch (IOException ex) {
-                logger.log(threadId, "Failed to connect to Client Output Stream: "
+                logger.log(threadId, "RequestHandler: Failed to connect to Client Output Stream: "
                         + ex.getMessage());
                 closeConnections();
                 return;
@@ -155,30 +257,11 @@ public class ForwardProxy {
             try {
                 bytesRead = fromIS.read(inputBytes);
             } catch (IOException ex) {
-                logger.log(threadId, "Cannot read incoming request: " + ex.getMessage());
+                logger.log(threadId, "RequestHandler: Cannot read request: " + ex.getMessage());
                 closeConnections();
                 return;
             }
-            if(ProxyLog.DEBUG) logger.deb(threadId, "Req: [" + new String(inputBytes, 0, bytesRead)+"]");
-            
-            // check for special health request
-            if(indexOf(inputBytes, 0, bytesRead, "fwdhealth")!=-1) {
-                if(ProxyLog.DEBUG) logger.deb(threadId, "Health request");
-                try {
-                    if(indexOf(inputBytes, 0, bytesRead, "GET /favicon.ico")!=-1 ||
-                            indexOf(inputBytes, 0, bytesRead, "GET /apple")!=-1)
-                        fromOS.write("HTTP/1.1 200 OK\r\n\r\n".getBytes());
-                    else {
-                        logger.log(threadId, "Health request");
-                        fromOS.write(showInfo());
-                    }
-                } catch (IOException ex) {
-                    logger.log(threadId, "Failed to send health response to client: "
-                            + ex.getMessage());
-                }
-                closeConnections();
-                return;
-            }
+            if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: Req: [" + new String(inputBytes, 0, bytesRead)+"]");
 
             // check for valid request before continuing
             // if request contains no "Icy-MetaData: 1", reject it
@@ -187,7 +270,7 @@ public class ForwardProxy {
                 try {
                     fromOS.write("HTTP/1.1 404\r\n\r\n".getBytes());
                 } catch (IOException ex) {
-                    logger.log(threadId, "Failed to send 404 response to client: "
+                    logger.log(threadId, "RequestHandler: Failed to send 404 response to client: "
                             + ex.getMessage());
                 }
                 closeConnections();
@@ -201,7 +284,7 @@ public class ForwardProxy {
             if(ProxyLog.DEBUG) logger.deb(threadId, "searchPath: " + searchPath);
             proxyUrl = radioList.get(searchPath.toLowerCase());
             if(proxyUrl==null) {
-                logger.log(threadId, "Invalid search path: [" + searchPath + "]");
+                logger.log(threadId, "RequestHandler: Invalid search path: [" + searchPath + "]");
                 closeConnections();
                 return;
             }
@@ -211,18 +294,18 @@ public class ForwardProxy {
                 toSocket = new Socket(proxyUrl.getHost(), proxyUrl.getPort());
                 toSocket.setSoTimeout(SOCKET_TIMEOUT_MS);
             } catch (IOException ex) {
-                logger.log(threadId, "Failed to connect to music service [" 
+                logger.log(threadId, "RequestHandler: Failed to connect to music service [" 
                         + proxyUrl.getUrlString() + "]: " + ex.getMessage());
                 closeConnections();
                 return;
             }
-            logger.log(threadId, "Connected to " + proxyUrl.getFriendlyName());
+            logger.log(threadId, "RequestHandler: Connected to " + proxyUrl.getFriendlyName());
 
             // get server outputstream
             try {
                 toOS = toSocket.getOutputStream();
             } catch (IOException ex) {
-                logger.log(threadId, "Failed to connect to Server Output Streams: "
+                logger.log(threadId, "RequestHandler: Failed to connect to Server Output Streams: "
                         + ex.getMessage());
                 closeConnections();
                 return;
@@ -232,7 +315,7 @@ public class ForwardProxy {
             try {
                 toIS = toSocket.getInputStream();
             } catch (IOException ex) {
-                logger.log(threadId, "Failed to connect to Server Input Stream: "
+                logger.log(threadId, "RequestHandler: Failed to connect to Server Input Stream: "
                         + ex.getMessage());
                 closeConnections();
                 return;
@@ -246,11 +329,11 @@ public class ForwardProxy {
             // create request and send it to the music service
             replace(inputBytes, 0, bytesRead, searchPath, proxyUrl.getPath());
             bytesRead = bytesRead + proxyUrl.getPath().length() - searchPath.length();
-            if(ProxyLog.DEBUG) logger.deb(threadId, "Req to send: [" + new String(inputBytes, 0, bytesRead)+"]");
+            if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: Req to send: [" + new String(inputBytes, 0, bytesRead)+"]");
             try {
                 toOS.write(inputBytes, 0, bytesRead+proxyUrl.getPath().length()-1);
             } catch (IOException ex) {
-                logger.log(threadId, "Cannot send request to server: " + ex.getMessage());
+                logger.log(threadId, "RequestHandler: Cannot send request to server: " + ex.getMessage());
                 closeConnections();
                 return;
             }
@@ -258,9 +341,9 @@ public class ForwardProxy {
             // read response from music service
             try {
                 bytesRead=toIS.read(inputBytes);
-                if(ProxyLog.DEBUG) logger.deb(threadId, "bytesRead: " + bytesRead);
+                if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: bytesRead: " + bytesRead);
             } catch (IOException ex) {
-                logger.log(threadId, "Cannot read server response: " + ex.getMessage());
+                logger.log(threadId, "RequestHandler: Cannot read server response: " + ex.getMessage());
                 closeConnections();
                 return;
             }
@@ -298,13 +381,13 @@ public class ForwardProxy {
                         if(offset==ioBufferSize) {
                             try {
                                 fromOS.write(inputBytes);
-                                if(ProxyLog.DEBUG) logger.deb(threadId, "Sent buffer to streamer");
+                                if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: Sent buffer to streamer");
                             } catch (IOException ex) { break; }
                             offset=0;
                         }
                     } 
                 } catch (IOException ex) { 
-                    logger.log(threadId, "Cannot read server response: " + ex.getMessage());
+                    logger.log(threadId, "RequestHandler: Cannot read server response: " + ex.getMessage());
                 }
             }
 
@@ -331,18 +414,14 @@ public class ForwardProxy {
             sb.append("  ").append(station.getFriendlyName()).append(" (").
                     append(station.getSearchPath()).append(")\n");
         }
-        sb.append("\nKurt Lefevre (http://linkedin.com/in/lefevrekurt)");
+        sb.append("\nKurt Lefevre (linkedin.com/in/lefevrekurt)");
             
         String msg = "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=UTF-8\r\nContent-Length: "
                             + sb.length() + "\r\n\r\n" + sb.toString();
         return msg.getBytes();
     }
     
-    private int createForwardProxyServer(int forwardProxyPort) {
-        bootTime = System.currentTimeMillis();
-        SimpleDateFormat calFormatter = new SimpleDateFormat("dd-MM-yyyy 'at' HH:mm:ss");
-        bootTimeStr = calFormatter.format(new Date(bootTime));
-        
+    private int createForwardProxyServer() {
         // Create the Server Socket for the Proxy
         ServerSocket forwardProxyServerSocket ;
         try {
@@ -364,11 +443,48 @@ public class ForwardProxy {
         }
     }
 
+    
+    private int createMonitor() {
+        bootTime = System.currentTimeMillis();
+        SimpleDateFormat calFormatter = new SimpleDateFormat("dd-MM-yyyy 'at' HH:mm:ss");
+        bootTimeStr = calFormatter.format(new Date(bootTime));
+        
+        // Create the Server Socket for the Proxy
+        ServerSocket monitorSocket ;
+        try {
+            monitorSocket = new ServerSocket(monitorPort);
+        } catch (IOException ex) {
+            logger.log("Failed to bind Monitor to port " + monitorPort + ": "
+                    + ex.getMessage());
+            return PROXY_SERVER_CREATION_FAILED;
+        }
+        
+        logger.log("Monitor started on port " + monitorPort);
+        while(true) {
+            try {
+                new MonitorHandler(monitorSocket.accept()).start();
+            } catch (IOException ex) {
+                logger.log("Failed to dispatch request: " + ex.getMessage());
+                return REQUEST_DISPATCH_FAILED;
+            }
+        }
+    }
+    
     private int postValidation() {
         // post checks
         if(forwardProxyPort==0) {
-            logger.log("Missing PORT in configuration file");
+            logger.log("Missing PROXY_PORT in configuration file");
             return MISSING_PORT;
+        }
+        
+        if(monitorPort==0) {
+            logger.log("Missing MONITOR_PORT in configuration file");
+            return MISSING_PORT;
+        }
+        
+        if(monitorPort==forwardProxyPort) {
+            logger.log("MONITOR_PORT and PROXY_PORT cannot be the same port");
+            return INVALID_PORT;
         }
         
         // display radio station list
@@ -431,11 +547,19 @@ public class ForwardProxy {
             
             // parse line
             switch(key.toLowerCase()) {
-                case "port":
+                case "proxy_port":
                     try {
                         forwardProxyPort=Integer.parseInt(value);
                     } catch(NumberFormatException e) {
-                        logger.log("Can't parse port [" + value + "]");
+                        logger.log("Can't parse PROXY_PORT [" + value + "]");
+                        return INVALID_PORT;
+                    }
+                    break;
+                case "monitor_port":
+                    try {
+                        monitorPort=Integer.parseInt(value);
+                    } catch(NumberFormatException e) {
+                        logger.log("Can't parse MONITOR_PORT [" + value + "]");
                         return INVALID_PORT;
                     }
                     break;
@@ -480,7 +604,7 @@ public class ForwardProxy {
                     } else radioList.put('/' + searchPath.toLowerCase(), proxyUrl);
                     break;
                 default:
-                    logger.log("Don't understand [" + value + "]");
+                    logger.log("Don't understand [" + line + "]");
                     break;
             }
         }
@@ -515,8 +639,30 @@ public class ForwardProxy {
         // Arguments parsed successfully
         dispStartup();
         
-        // start proxyserver
-        return createForwardProxyServer(forwardProxyPort);
+        // Start proxy server
+        Thread proxyServerThread = new Thread(){
+            @Override
+            public void run() {
+                createForwardProxyServer();
+            }
+        };
+        proxyServerThread.start();        
+
+        // Start Monitor
+        Thread monitorThread = new Thread(){
+            @Override
+            public void run() {
+                createMonitor();
+            }
+        };
+        monitorThread.start();      
+        
+        // wait till proxyServerThread dies
+        try {
+            proxyServerThread.join();
+        } catch (InterruptedException ex) {}
+
+        return SUCCESS;
     }
 
 /*    public int start2(String[] args) {

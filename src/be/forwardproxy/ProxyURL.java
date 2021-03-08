@@ -21,7 +21,7 @@ public class ProxyURL {
         try {
             url = new java.net.URL(this.urlString);
         } catch (MalformedURLException ex) {
-            ProxyLog.getInstance().log("URL is malformed [" + this.urlString + "]: " + ex.getMessage());
+            ProxyLog.getInstance().log("ProxyURL: URL is malformed [" + this.urlString + "]: " + ex.getMessage());
             System.exit(ForwardProxy.MALFORMED_URL);
         }
 

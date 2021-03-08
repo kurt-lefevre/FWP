@@ -55,7 +55,7 @@ public class OggDecoder {
                 
                 // check if thread is stale
                 if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: bytesProcessed: " +
-                        bytesProcessed + " totalBytes: " + totalBytes);
+                        bytesProcessed + " - totalBytes: " + totalBytes);
                 if(totalBytes==bytesProcessed) {
                     logger.log(threadId, "StaleThreadMonitor: Terminated stale thread");
                     try {
@@ -82,7 +82,7 @@ public class OggDecoder {
     }
 
     private String formatTransferRate(long bytes, long time) {
-        double bytesPerSec = bytes   * 1000000000/(double)time;
+        double bytesPerSec = bytes * 1000000000/(double)time;
         
         // put most likely option first
         if(bytesPerSec>=1024 && bytesPerSec<1048576)
@@ -110,7 +110,7 @@ public class OggDecoder {
         StaleThreadMonitor staleThreadMonitor = new StaleThreadMonitor();
         staleThreadMonitor.start();
         
-        logger.log(threadId, "Start OggDecoder for " + proxyUrl.getFriendlyName());
+        logger.log(threadId, "OggDecoder: Start for " + proxyUrl.getFriendlyName());
         InputStream pIS = p.getInputStream();
         long startTime = System.nanoTime();
         long totalTime=0;
@@ -140,7 +140,7 @@ public class OggDecoder {
         staleThreadMonitor.exit();
         p.destroy();
         logger.adjustDecoderCount(-1);
-        logger.log(threadId, "Stop OggDecoder for " + proxyUrl.getFriendlyName() + 
+        logger.log(threadId, "OggDecoder: Stop for " + proxyUrl.getFriendlyName() + 
                 formatTransferRate(totalBytes, totalTime));
     }
 }
