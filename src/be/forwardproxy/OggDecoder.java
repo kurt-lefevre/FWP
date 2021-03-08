@@ -23,20 +23,66 @@ import java.io.OutputStream;
 import java.net.SocketException;
 
 public class OggDecoder {
-    private final long threadId;
     private final ProxyURL proxyUrl;
     private final int ioBufferSize;
     private final ProxyLog logger=ProxyLog.getInstance();
+    private long totalBytes;
+    private final long threadId;
+    private OutputStream os;
 
-    public OggDecoder(long threadId, ProxyURL proxyUrl, int ioBufferSize) {
-        this.threadId = threadId;
+    private class StaleThreadMonitor extends Thread {
+        private static final int CHECK_INTERVAL_MS=60000;
+        private boolean loop=true;
+        private long bytesProcessed;
+
+        public void exit() {
+            loop=false;
+            this.interrupt();
+        }
+        
+        public void run() {
+            logger.adjustThreadCount(1);
+            if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: Start");
+            while(loop) {
+                bytesProcessed = totalBytes;
+
+                // wait
+                try { Thread.sleep(CHECK_INTERVAL_MS); } 
+                catch (InterruptedException ex) {
+                    if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: Terminated during sleep");
+                    break;
+                }
+                
+                // check if thread is stale
+                if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: bytesProcessed: " +
+                        bytesProcessed + " totalBytes: " + totalBytes);
+                if(totalBytes==bytesProcessed) {
+                    logger.log(threadId, "StaleThreadMonitor: Terminated stale thread");
+                    try {
+                        os.close();
+                    } catch (IOException ex) {
+                        logger.log(threadId, "StaleThreadMonitor: Failed to close stream:" 
+                                + ex.getMessage());
+                    }
+                    break;
+                }
+            }
+            
+            logger.adjustThreadCount(-1);
+            if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: Stop");
+        }
+    }
+    
+    public OggDecoder(long threadId, ProxyURL proxyUrl, int ioBufferSize, OutputStream os) {
         this.proxyUrl=proxyUrl;
+        this.threadId=threadId;
         this.ioBufferSize=ioBufferSize;
+        this.os=os;
         logger.adjustDecoderCount(1);
     }
 
     private String formatTransferRate(long bytes, long time) {
-        double bytesPerSec = bytes * 1000000000/(double)time;
+        double bytesPerSec = bytes   * 1000000000/(double)time;
         
         // put most likely option first
         if(bytesPerSec>=1024 && bytesPerSec<1048576)
@@ -48,9 +94,8 @@ public class OggDecoder {
         return String.format(" (%.1f mB/s)", bytesPerSec/1048576);
     }
     
-    public void decode(OutputStream os, byte[] inputBytes, int streamOffset) {
+    public void decode(byte[] inputBytes, int streamOffset) {
 //      ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-f", "ogg", "-i", proxyUrl.getUrlString(), "-f", "wav", "-map_metadata", "0",  "-id3v2_version", "3", "-");
-
         ProcessBuilder pb = new ProcessBuilder("./decode.sh", proxyUrl.getUrlString());
         pb.redirectError(ProcessBuilder.Redirect.DISCARD);
         Process p=null;
@@ -60,14 +105,16 @@ public class OggDecoder {
             logger.log(threadId, "OggDecoder: Cannot start decode script: " + ex.getMessage());
             System.exit(ForwardProxy.CANNOT_START_DECODE_SCRIPT);
         }
+
+        // start stale detector for this thread
+        StaleThreadMonitor staleThreadMonitor = new StaleThreadMonitor();
+        staleThreadMonitor.start();
         
-        int bytesRead;
         logger.log(threadId, "Start OggDecoder for " + proxyUrl.getFriendlyName());
         InputStream pIS = p.getInputStream();
-
-        long totalBytes=0;
         long startTime = System.nanoTime();
         long totalTime=0;
+        int bytesRead=0;
         try {
             while((bytesRead=pIS.read(inputBytes, streamOffset, ioBufferSize-streamOffset))!=-1) {
                 streamOffset += bytesRead;
@@ -89,7 +136,8 @@ public class OggDecoder {
             logger.log(threadId, "OggDecoder: Cannot read server response: " + ex.getMessage());
         }
 
-        // Stop process
+        // Cleanup
+        staleThreadMonitor.exit();
         p.destroy();
         logger.adjustDecoderCount(-1);
         logger.log(threadId, "Stop OggDecoder for " + proxyUrl.getFriendlyName() + 

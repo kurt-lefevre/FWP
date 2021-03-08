@@ -5,6 +5,7 @@
     1.1.070321   | Added searchpath in showInfo()
     1.2.070321   | Improved debugging of incoming requests
     1.3.070321   | Sorted radio stations when displaying them
+    1.4.080321   | Added StaleThreadMonitor + Health monitor has dedicated port
     -------------+--------------------------------------------------------------
 */
 
@@ -28,7 +29,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.3.070321";
+    private final static String APP_VERSION = "ForwardProxy V1.4.080321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -286,8 +287,8 @@ public class ForwardProxy {
                 // bytesRead contains the total of bytes read last time
                 // offset points to the first byte after the http response; this
                 // is the start of the stream
-                new OggDecoder(this.getId(), proxyUrl, ioBufferSize).
-                        decode(fromOS, inputBytes, offset);
+                new OggDecoder(this.getId(), proxyUrl, ioBufferSize, fromOS).
+                        decode(inputBytes, offset);
             } else {
                 // Write till sreamer closes socket. 
                 offset=bytesRead;
