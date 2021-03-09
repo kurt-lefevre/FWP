@@ -7,6 +7,7 @@
     1.3.070321   | Sorted radio stations when displaying them
     1.4.080321   | Added StaleThreadMonitor + Health monitor has dedicated port
     1.5.090321   | Added "log" property in config file to enable/disable logging
+    1.6.090321   | Added debug & logging info to info web page
     -------------+--------------------------------------------------------------
 */
 
@@ -30,7 +31,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.5.090321";
+    private final static String APP_VERSION = "ForwardProxy V1.6.090321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -409,7 +410,11 @@ public class ForwardProxy {
             append("Threads          ").append(logger.getThreadCount()).append('\n').
             append("Up time          ").append(uptime).append('\n').
             append("Boot time        ").append(bootTimeStr).append('\n').
-            append("Logfile size     ").append(logger.getLogfileSize()).append(" kB\n").
+            append("Logging          ");
+        if(log) sb.append("ON\n"); else sb.append("OFF\n");
+        sb.append("Debug mode       ");
+        if(ProxyLog.DEBUG) sb.append("YES\n"); else sb.append("NO\n");
+        sb.append("Logfile size     ").append(logger.getLogfileSize()).append(" kB\n").
             append("I/O buffer size  ").append(ioBufferSize/1024).append(" kB\n\n").
             append("Stations\n--------\n");
         for(ProxyURL station : radioListSorted) {
