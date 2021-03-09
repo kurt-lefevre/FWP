@@ -8,6 +8,7 @@
     1.4.080321   | Added StaleThreadMonitor + Health monitor has dedicated port
     1.5.090321   | Added "log" property in config file to enable/disable logging
     1.6.090321   | Added debug & logging info to info web page
+    1.7.090321   | Increased socket timeout
     -------------+--------------------------------------------------------------
 */
 
@@ -31,7 +32,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.6.090321";
+    private final static String APP_VERSION = "ForwardProxy V1.7.090321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -58,7 +59,7 @@ public class ForwardProxy {
     public final static int NO_STATIONS_DEFINED = 11;
     
     public final static int IO_BUFFER_SIZE_KB = 8;
-    public final static int SOCKET_TIMEOUT_MS = 1000;
+    public final static int SOCKET_TIMEOUT_MS = 10000;
     
     public static Comparator<ProxyURL> FRIENDLY_NAME_COMPARATOR = new Comparator<ProxyURL>() {         
         @Override         
