@@ -9,6 +9,7 @@
     1.5.090321   | Added "log" property in config file to enable/disable logging
     1.6.090321   | Added debug & logging info to info web page
     1.7.090321   | Increased socket timeout
+    1.8.090321   | Cosmetic update in showInfo()
     -------------+--------------------------------------------------------------
 */
 
@@ -32,7 +33,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.7.090321";
+    private final static String APP_VERSION = "ForwardProxy V1.8.090321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -414,7 +415,7 @@ public class ForwardProxy {
             append("Logging          ");
         if(log) sb.append("ON\n"); else sb.append("OFF\n");
         sb.append("Debug mode       ");
-        if(ProxyLog.DEBUG) sb.append("YES\n"); else sb.append("NO\n");
+        if(ProxyLog.DEBUG) sb.append("ON\n"); else sb.append("OFF\n");
         sb.append("Logfile size     ").append(logger.getLogfileSize()).append(" kB\n").
             append("I/O buffer size  ").append(ioBufferSize/1024).append(" kB\n\n").
             append("Stations\n--------\n");
