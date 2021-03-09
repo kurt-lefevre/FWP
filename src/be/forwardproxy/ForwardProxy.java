@@ -6,6 +6,7 @@
     1.2.070321   | Improved debugging of incoming requests
     1.3.070321   | Sorted radio stations when displaying them
     1.4.080321   | Added StaleThreadMonitor + Health monitor has dedicated port
+    1.5.090321   | Added "log" property in config file to enable/disable logging
     -------------+--------------------------------------------------------------
 */
 
@@ -29,7 +30,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.4.080321";
+    private final static String APP_VERSION = "ForwardProxy V1.5.090321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -39,6 +40,7 @@ public class ForwardProxy {
     private ArrayList<ProxyURL> radioListSorted;
     private long bootTime;
     private String bootTimeStr;
+    private boolean log;
     
     // exit statuses
     public final static int SUCCESS = 0;
@@ -586,6 +588,13 @@ public class ForwardProxy {
                         logger.log("Can't convert DEBUG [" + value + "]. Assuming false");
                     }
                     break;
+                case "log":
+                    try {
+                        log=Boolean.parseBoolean(value);
+                    } catch(NumberFormatException e) {
+                        logger.log("Can't convert LOG [" + value + "]. Assuming false");
+                    }
+                    break;
                 case "station":
                     // station
                     oneLine = value.split(",");
@@ -630,7 +639,7 @@ public class ForwardProxy {
         if(retVal!=SUCCESS) return retVal;
         
         // init logging 
-        logger.initializeLogger("ForwardProxy_");
+        if(log) logger.initializeLogger("ForwardProxy_");
         
         // do post check validation of values
         retVal = postValidation();
