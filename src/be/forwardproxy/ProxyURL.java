@@ -7,6 +7,7 @@ public class ProxyURL {
     private final String host;
     private final String path;
     private int port;
+    private boolean https;
     private final String urlString;
     private final String friendlyName;
     private final String searchPath;
@@ -25,13 +26,22 @@ public class ProxyURL {
             System.exit(ForwardProxy.MALFORMED_URL);
         }
 
+        https = url.getProtocol().equals("https");
+
         // Set default port
         port=url.getPort();
-        if(port == -1) port = 80;
+        if(port == -1) {
+            if(https) port=443;
+            else port = 80;
+        }
 
         host=url.getHost();
         path=url.getPath();
         protocol=url.getProtocol();
+    }
+
+    public boolean isHttps() {
+        return https;
     }
 
     public String getSearchPath() {

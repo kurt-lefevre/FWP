@@ -32,12 +32,15 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.stream.Stream;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 public class ForwardProxy {
     private final static String APP_VERSION = "ForwardProxy V1.9.100321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
+    private final static SSLSocketFactory sslsocketfactory = (SSLSocketFactory)SSLSocketFactory.getDefault();
     private int forwardProxyPort, monitorPort;  
     private int ioBufferSize = IO_BUFFER_SIZE_KB * 1024;
     private HashMap<String, ProxyURL> radioList;
@@ -51,14 +54,13 @@ public class ForwardProxy {
     public final static int MISSING_ARGUMENTS = 1;
     public final static int INVALID_PORT = 2;
     public final static int PROXY_SERVER_CREATION_FAILED = 3;
-    public final static int HTTPS_NOT_SUPPORTED = 4;
+    public final static int NO_STATIONS_DEFINED = 4;
     public final static int REQUEST_DISPATCH_FAILED = 5;
     public final static int CANNOT_START_DECODE_SCRIPT = 6;
     public final static int MALFORMED_URL = 7;
     public final static int CANNOT_READ_CONFIG_FILE=8;
     public final static int CANNOT_PARSE_CONFIG_FILE=9;
     public final static int MISSING_PORT = 10;
-    public final static int NO_STATIONS_DEFINED = 11;
     
     public final static int IO_BUFFER_SIZE_KB = 8;
     public final static int SOCKET_TIMEOUT_MS = 10000;
@@ -267,7 +269,8 @@ public class ForwardProxy {
                 closeConnections();
                 return;
             }
-            if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: Req: [" + new String(inputBytes, 0, bytesRead)+"]");
+            if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: " + bytesRead +
+                    " bytes - Req: [" + new String(inputBytes, 0, bytesRead)+"]");
 
             // check for valid request before continuing
             // if request contains no "Icy-MetaData: 1", reject it
@@ -297,7 +300,11 @@ public class ForwardProxy {
            
             // Connect to music service/server
             try {
-                toSocket = new Socket(proxyUrl.getHost(), proxyUrl.getPort());
+                if(proxyUrl.isHttps()) {
+                    if(ProxyLog.DEBUG) logger.deb(threadId, "Establishing SSL connection");
+                    toSocket = (SSLSocket)sslsocketfactory.createSocket(proxyUrl.getHost(), proxyUrl.getPort());
+                    //((SSLSocket)toSocket).startHandshake();
+                } else toSocket = new Socket(proxyUrl.getHost(), proxyUrl.getPort());
                 toSocket.setSoTimeout(SOCKET_TIMEOUT_MS);
             } catch (IOException ex) {
                 logger.log(threadId, "RequestHandler: Failed to connect to music service [" 
@@ -365,7 +372,8 @@ public class ForwardProxy {
                 else {
                     // if not an audio content-type response, create a fake response
                     // so the naim can deal with it.
-                    if(ProxyLog.DEBUG) logger.deb(threadId, "Non audio content type");
+                    if(ProxyLog.DEBUG) logger.deb(threadId, "Non audio Resp: [" + 
+                            new String(inputBytes, 0, bytesRead)+"]");
                     StringBuilder sb = new StringBuilder();
                     sb.append("HTTP/1.0 200 OK\nContent-Type: audio/wav").
                         append("\nicy-description:").append(proxyUrl.getFriendlyName()).
@@ -630,10 +638,7 @@ public class ForwardProxy {
                     friendlyName = oneLine[1].strip();
                     forwardUrl = oneLine[2].strip();
                     proxyUrl = new ProxyURL(forwardUrl, friendlyName, searchPath);
-                    if(!proxyUrl.getProtocol().equals("http")) {
-                        logger.log("HTTPS URLs are not supported: [" + 
-                                proxyUrl.getUrlString() + "]");
-                    } else radioList.put('/' + searchPath.toLowerCase(), proxyUrl);
+                    radioList.put('/' + searchPath.toLowerCase(), proxyUrl);
                     break;
                 default:
                     logger.log("Don't understand [" + line + "]");
