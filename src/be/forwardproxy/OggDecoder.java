@@ -3,15 +3,6 @@
   16/24 bit: wget -qO- $1|flac -d --totally-silent --ogg -c -|ffmpeg -nostats -loglevel 0 -f wav -i - -c:a copy -f wav -
   See: https://stackoverflow.com/questions/56138370/problems-piping-ffmpeg-to-flac-encoder
 
-  URLs:
-  MP3: http://mscp3.live-streams.nl:8340/jazz-low.mp3
-  FLAC: http://stream.radioparadise.com/flac
-  FLAC: http://mscp2.live-streams.nl:8100/flac.flac // HiOline
-  FLAC: http://mscp3.live-streams.nl:8340/jazz-flac.flac  // NAIM
-  FLAC: http://icecast3.streamserver24.com:18800/motherearth  // 24 bit
-  FLAC: http://thecheese.ddns.net:8004/stream // 16 bit
-  FLAC: http://secure.live-streams.nl/flac.flac // 24 bit
-  OCI: http://158.101.168.33:9500/
   https://github.com/ymnk/jorbis to decode ogg
 */
 
@@ -26,7 +17,7 @@ public class OggDecoder {
     private final ProxyURL proxyUrl;
     private final int ioBufferSize;
     private static final ProxyLog logger=ProxyLog.getInstance();
-    private static final String DECODE_SCRIPT = logger.getApplicationDir()+"decode.sh";
+    private static final String DECODE_SCRIPT_DIR = logger.getApplicationDir()+"decode";
     private long totalBytes;
     private final long threadId;
     private OutputStream os;
@@ -60,7 +51,11 @@ public class OggDecoder {
                 if(totalBytes==bytesProcessed) {
                     logger.log(threadId, "StaleThreadMonitor: Terminated stale thread");
                     try {
+                        // level 1: Close the stream. Generates an excption that terminates the thread
                         os.close();
+                        
+                        // level 2: Kill the decode process and its decendants
+                        
                     } catch (IOException ex) {
                         logger.log(threadId, "StaleThreadMonitor: Failed to close stream:" 
                                 + ex.getMessage());
@@ -97,7 +92,7 @@ public class OggDecoder {
     
     public void decode(byte[] inputBytes, int streamOffset) {
 //      ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-f", "ogg", "-i", proxyUrl.getUrlString(), "-f", "wav", "-map_metadata", "0",  "-id3v2_version", "3", "-");
-        ProcessBuilder pb = new ProcessBuilder(DECODE_SCRIPT, proxyUrl.getUrlString());
+        ProcessBuilder pb = new ProcessBuilder(DECODE_SCRIPT_DIR+proxyUrl.getDecoderScriptNr()+".sh", proxyUrl.getUrlString());
         pb.redirectError(ProcessBuilder.Redirect.DISCARD);
         Process p=null;
         try {         

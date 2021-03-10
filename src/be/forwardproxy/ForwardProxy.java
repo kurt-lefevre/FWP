@@ -61,6 +61,7 @@ public class ForwardProxy {
     public final static int CANNOT_READ_CONFIG_FILE=8;
     public final static int CANNOT_PARSE_CONFIG_FILE=9;
     public final static int MISSING_PORT = 10;
+    public final static int INVALID_SCRIPT_NR = 11;
     
     public final static int IO_BUFFER_SIZE_KB = 8;
     public final static int SOCKET_TIMEOUT_MS = 10000;
@@ -629,7 +630,7 @@ public class ForwardProxy {
                 case "station":
                     // station
                     oneLine = value.split(",");
-                    if(oneLine.length!=3) {
+                    if(oneLine.length!=4) {
                         logger.log("Can't parse line for STATION [" + value + "]");
                         break;
                     }
@@ -637,7 +638,15 @@ public class ForwardProxy {
                     searchPath = oneLine[0].strip();
                     friendlyName = oneLine[1].strip();
                     forwardUrl = oneLine[2].strip();
-                    proxyUrl = new ProxyURL(forwardUrl, friendlyName, searchPath);
+                    int decoderScriptNr;
+                    try {
+                        decoderScriptNr=Integer.parseInt(oneLine[3].strip());
+                    } catch(NumberFormatException e) {
+                        logger.log("Can't parse decode script id in [" + oneLine[3] + "]");
+                        return INVALID_SCRIPT_NR;
+                    }
+                    
+                    proxyUrl = new ProxyURL(forwardUrl, friendlyName, searchPath, decoderScriptNr);
                     radioList.put('/' + searchPath.toLowerCase(), proxyUrl);
                     break;
                 default:

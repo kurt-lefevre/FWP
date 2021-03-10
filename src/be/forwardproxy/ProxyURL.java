@@ -7,13 +7,14 @@ public class ProxyURL {
     private final String host;
     private final String path;
     private int port;
+    private int decoderScriptNr;
     private boolean https;
     private final String urlString;
     private final String friendlyName;
     private final String searchPath;
     private final String protocol;
 
-    public ProxyURL(String urlString, String friendlyName, String searchPath) {
+    public ProxyURL(String urlString, String friendlyName, String searchPath, int decoderScriptNr) {
         this.urlString = urlString;
         this.friendlyName=friendlyName;
         this.searchPath=searchPath;
@@ -38,6 +39,11 @@ public class ProxyURL {
         host=url.getHost();
         path=url.getPath();
         protocol=url.getProtocol();
+        this.decoderScriptNr=decoderScriptNr;
+    }
+
+    public int getDecoderScriptNr() {
+        return decoderScriptNr;
     }
 
     public boolean isHttps() {
