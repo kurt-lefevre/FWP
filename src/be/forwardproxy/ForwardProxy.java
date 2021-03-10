@@ -10,6 +10,7 @@
     1.6.090321   | Added debug & logging info to info web page
     1.7.090321   | Increased socket timeout
     1.8.090321   | Cosmetic update in showInfo()
+    1.9.100321   | non audio content interception + better stale thread handling
     -------------+--------------------------------------------------------------
 */
 
@@ -33,7 +34,7 @@ import java.util.Iterator;
 import java.util.stream.Stream;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.8.090321";
+    private final static String APP_VERSION = "ForwardProxy V1.9.100321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -328,7 +329,8 @@ public class ForwardProxy {
 
             // start decoder when "Range: bytes=0-" is in the request
             boolean needDecoding = false;
-            // below is naim specific. It avoid starting multiple time the ffmpeg process
+            
+            // Naim specific. It avoids starting multiple time the decode process
             if(indexOf(inputBytes, 0, bytesRead, "bytes=0-")!=-1) needDecoding = true;
             
             // create request and send it to the music service
@@ -352,17 +354,31 @@ public class ForwardProxy {
                 closeConnections();
                 return;
             }
-            
+
             // limit response to HTTP content
             int offset=indexOf(inputBytes, 0, bytesRead, "\r\n\r\n");
-
+            
             // Replace Content-Type info
             if(replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")==-1)
                 if(replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1)
                     bytesRead-=6;
-/*            if(replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")!=-1) bytesRead+=0;
-            else if(replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1) bytesRead-=6;*/
-            offset+=4; // add the \r\n pairs again
+                else {
+                    // if not an audio content-type response, create a fake response
+                    // so the naim can deal with it.
+                    if(ProxyLog.DEBUG) logger.deb(threadId, "Non audio content type");
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("HTTP/1.0 200 OK\nContent-Type: audio/wav").
+                        append("\nicy-description:").append(proxyUrl.getFriendlyName()).
+                        append("\nicy-name:").append(proxyUrl.getFriendlyName()).
+                        append(" streamed by ForwardProxy - ©Kurt Lefevre").
+                        append("\nicy-pub:0\r\n\r\n");
+
+                    byte[] bytes = sb.toString().getBytes();
+                    System.arraycopy(bytes, 0, inputBytes, 0, bytes.length);
+                    offset=bytes.length-4; // correct afterwards
+                }
+            
+            offset+=4; // add the \r\n pairs again we stripped
             if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: Resp: [" + new String(inputBytes, 0, offset) +"]");
 
             // if decode request, pass on to decoder
@@ -684,15 +700,16 @@ public class ForwardProxy {
 /*    public int start2(String[] args) {
         try {
             ProxyLog.DEBUG=true;
-            ProxyURL proxyUrl = new ProxyURL("http://secure.live-streams.nl/flac.flac", "Intense Radio");
-//            ProxyURL proxyUrl = new ProxyURL("http://mscp3.live-streams.nl:8250/class-flac.flac", "Naim Classic");
+            ProxyURL proxyUrl = new ProxyURL("http://chillout.zone/chillout_plus", "Chill Zone", "");
+//            ProxyURL proxyUrl = new ProxyURL("http://secure.live-streams.nl/flac.flac", "Intense Radio", "");
+//            ProxyURL proxyUrl = new ProxyURL("http://mscp3.live-streams.nl:8250/class-flac.flac", "Naim Classic", "");
             FileOutputStream fos = new FileOutputStream("fons.out");
-            byte[] bytes = new byte[4096];
-            OggDecoder dec = new OggDecoder(-1, proxyUrl, 4096);
-            dec.decode(fos, bytes, 0);
+            byte[] bytes = new byte[8192];
+            OggDecoder dec = new OggDecoder(-1, proxyUrl, 8192, fos);
+            dec.decode(bytes, 0);
             fos.close();
         } catch (Exception ex) {
-            ProxyLog.log("Fout! " + ex);
+            ex.printStackTrace();
         }
         return 0;
     }*/
