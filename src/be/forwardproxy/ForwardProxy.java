@@ -10,7 +10,6 @@
     1.6.090321   | Added debug & logging info to info web page
     1.7.090321   | Increased socket timeout
     1.8.090321   | Cosmetic update in showInfo()
-    1.9.100321   | non audio content interception + better stale thread handling
     -------------+--------------------------------------------------------------
 */
 
@@ -36,7 +35,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V1.9.100321";
+    private final static String APP_VERSION = "ForwardProxy V2.0.110321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -638,15 +637,15 @@ public class ForwardProxy {
                     searchPath = oneLine[0].strip();
                     friendlyName = oneLine[1].strip();
                     forwardUrl = oneLine[2].strip();
-                    int decoderScriptNr;
+                    int decodeScriptId;
                     try {
-                        decoderScriptNr=Integer.parseInt(oneLine[3].strip());
+                        decodeScriptId=Integer.parseInt(oneLine[3].strip());
                     } catch(NumberFormatException e) {
                         logger.log("Can't parse decode script id in [" + oneLine[3] + "]");
                         return INVALID_SCRIPT_NR;
                     }
                     
-                    proxyUrl = new ProxyURL(forwardUrl, friendlyName, searchPath, decoderScriptNr);
+                    proxyUrl = new ProxyURL(forwardUrl, friendlyName, searchPath, decodeScriptId);
                     radioList.put('/' + searchPath.toLowerCase(), proxyUrl);
                     break;
                 default:

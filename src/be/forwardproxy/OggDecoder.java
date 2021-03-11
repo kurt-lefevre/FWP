@@ -17,15 +17,22 @@ public class OggDecoder {
     private final ProxyURL proxyUrl;
     private final int ioBufferSize;
     private static final ProxyLog logger=ProxyLog.getInstance();
-    private static final String DECODE_SCRIPT_DIR = logger.getApplicationDir()+"decode";
+    private static final String APPLICATION_DIR = logger.getApplicationDir();
+    private static final String DECODE_SCRIPT = "decode";
+    private static final String KILL_SCRIPT = "killprocs.sh";
     private long totalBytes;
     private final long threadId;
-    private OutputStream os;
+    private final OutputStream os;
 
     private class StaleThreadMonitor extends Thread {
         private static final int CHECK_INTERVAL_MS=60000;
         private boolean loop=true;
         private long bytesProcessed;
+        private final long pId;
+
+        public StaleThreadMonitor(long pId) {
+            this.pId = pId;
+        }
 
         public void exit() {
             loop=false;
@@ -49,17 +56,24 @@ public class OggDecoder {
                 if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: bytesProcessed: " +
                         bytesProcessed + " - totalBytes: " + totalBytes);
                 if(totalBytes==bytesProcessed) {
-                    logger.log(threadId, "StaleThreadMonitor: Terminated stale thread");
+                    if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: Stale thread detected");
+                    // Close the stream. Generates an exception that terminates the thread
                     try {
-                        // level 1: Close the stream. Generates an excption that terminates the thread
                         os.close();
-                        
-                        // level 2: Kill the decode process and its decendants
-                        
                     } catch (IOException ex) {
-                        logger.log(threadId, "StaleThreadMonitor: Failed to close stream:" 
+                            logger.log(threadId, "StaleThreadMonitor: Failed to close stream:" 
                                 + ex.getMessage());
                     }
+
+                    // Kill the decode process and its decendants
+                    ProcessBuilder pk = new ProcessBuilder(APPLICATION_DIR + KILL_SCRIPT, Long.toString(pId));
+                    try {
+                        pk.start();
+                    } catch (Exception ex) {
+                        logger.log(threadId, "StaleThreadMonitor: Failed to run process kill script "
+                            + APPLICATION_DIR + KILL_SCRIPT + ": " + ex.getMessage()); 
+                    }
+                    logger.log(threadId, "StaleThreadMonitor: Terminated stale thread");
                     break;
                 }
             }
@@ -92,18 +106,20 @@ public class OggDecoder {
     
     public void decode(byte[] inputBytes, int streamOffset) {
 //      ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-f", "ogg", "-i", proxyUrl.getUrlString(), "-f", "wav", "-map_metadata", "0",  "-id3v2_version", "3", "-");
-        ProcessBuilder pb = new ProcessBuilder(DECODE_SCRIPT_DIR+proxyUrl.getDecoderScriptNr()+".sh", proxyUrl.getUrlString());
+        String decodeScript = APPLICATION_DIR + DECODE_SCRIPT + proxyUrl.getDecodeScriptId()+".sh";
+        ProcessBuilder pb = new ProcessBuilder(decodeScript, proxyUrl.getUrlString());
         pb.redirectError(ProcessBuilder.Redirect.DISCARD);
         Process p=null;
         try {         
             p = pb.start();
         } catch (IOException ex) {
-            logger.log(threadId, "OggDecoder: Cannot start decode script: " + ex.getMessage());
+            logger.log(threadId, "OggDecoder: Cannot start decode script " + 
+                    decodeScript + ": "+ ex.getMessage());
             System.exit(ForwardProxy.CANNOT_START_DECODE_SCRIPT);
         }
 
         // start stale detector for this thread
-        StaleThreadMonitor staleThreadMonitor = new StaleThreadMonitor();
+        StaleThreadMonitor staleThreadMonitor = new StaleThreadMonitor(p.pid());
         staleThreadMonitor.start();
         
         logger.log(threadId, "OggDecoder: Start for " + proxyUrl.getFriendlyName());
