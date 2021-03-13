@@ -55,12 +55,20 @@ public class ProxyLog {
         return threadCount;
     }
     
-    public void adjustThreadCount(int adjust) {
-        threadCount += adjust;
+    public void incThreadCount() {
+        threadCount++;
+    }
+
+    public void decThreadCount() {
+        threadCount--;
     }
     
-    public void adjustDecoderCount(int adjust) {
-        decoderCount += adjust;
+    public void incDecoderCount() {
+        decoderCount++;
+    }
+
+    public void decDecoderCount() {
+        decoderCount--;
     }
 
     public void initializeLogger(String logfileName){

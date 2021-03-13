@@ -7,13 +7,13 @@ public class ProxyURL {
     private final String host;
     private final String path;
     private int port;
-    private boolean active;
     private final int decodeScriptId;
     private final boolean https;
     private final String urlString;
     private final String friendlyName;
     private final String searchPath;
     private final String protocol;
+    private int clientCount;
 
     public ProxyURL(String urlString, String friendlyName, String searchPath, int decodeScriptId) {
         this.urlString = urlString;
@@ -43,17 +43,17 @@ public class ProxyURL {
         protocol=url.getProtocol();
     }
 
-    public void setActive() {
-        active=true;
+    public void incClientCount() {
+        clientCount++;
     }
 
-    public void setInActive() {
-        active=false;
+    public void decClientCount() {
+        clientCount--;
     }
     
     public char getActive() {
-        if(active) return '*';
-        else return ' ';
+        if(clientCount==0) return ' ';
+        else return (char)('0'+clientCount);
     }
     
     public int getDecodeScriptId() {

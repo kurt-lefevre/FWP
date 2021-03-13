@@ -103,7 +103,7 @@ public class ForwardProxy {
         }
         
         public void run() {
-            logger.adjustThreadCount(1);
+            logger.incThreadCount();
             logger.log(threadId, "MonitorHandler: Start");
             // get  inputstream
             try {
@@ -172,7 +172,7 @@ public class ForwardProxy {
             try { is.close(); } catch (Exception ex) {};
             try { os.close(); } catch (Exception ex) {};
 
-            logger.adjustThreadCount(-1);
+            logger.decThreadCount();
             logger.log(threadId, "MonitorHandler: Stop");
         }
     }
@@ -234,12 +234,12 @@ public class ForwardProxy {
             try { fromIS.close(); } catch (Exception ex) {};
             try { fromOS.close(); } catch (Exception ex) {};
 
-            logger.adjustThreadCount(-1);
+            logger.decThreadCount();
             logger.log(threadId, "RequestHandler: Stop");
         }
 
         public void run() {
-            logger.adjustThreadCount(1);
+            logger.incThreadCount();
             logger.log(threadId, "RequestHandler: Start");
             // get client inputstream
             try {

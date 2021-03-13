@@ -40,8 +40,8 @@ public class OggDecoder {
         }
         
         public void run() {
-            logger.adjustThreadCount(1);
             if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: Start");
+            logger.incThreadCount();
             while(loop) {
                 bytesProcessed = totalBytes;
 
@@ -78,7 +78,7 @@ public class OggDecoder {
                 }
             }
             
-            logger.adjustThreadCount(-1);
+            logger.decThreadCount();
             if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: Stop");
         }
     }
@@ -88,7 +88,6 @@ public class OggDecoder {
         this.threadId=threadId;
         this.ioBufferSize=ioBufferSize;
         this.os=os;
-        logger.adjustDecoderCount(1);
     }
 
     private String formatTransferRate(long bytes, long time) {
@@ -122,8 +121,9 @@ public class OggDecoder {
         StaleThreadMonitor staleThreadMonitor = new StaleThreadMonitor(p.pid());
         staleThreadMonitor.start();
         
+        logger.incDecoderCount();
         logger.log(threadId, "OggDecoder: Start for " + proxyUrl.getFriendlyName());
-        proxyUrl.setActive();
+        proxyUrl.incClientCount();
         InputStream pIS = p.getInputStream();
         long startTime = System.nanoTime();
         long totalTime=0;
@@ -152,8 +152,8 @@ public class OggDecoder {
         // Cleanup
         staleThreadMonitor.exit();
         p.destroy();
-        proxyUrl.setInActive();
-        logger.adjustDecoderCount(-1);
+        proxyUrl.decClientCount();
+        logger.decDecoderCount();
         logger.log(threadId, "OggDecoder: Stop for " + proxyUrl.getFriendlyName() + 
                 formatTransferRate(totalBytes, totalTime));
     }
