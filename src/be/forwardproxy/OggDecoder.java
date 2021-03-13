@@ -123,6 +123,7 @@ public class OggDecoder {
         staleThreadMonitor.start();
         
         logger.log(threadId, "OggDecoder: Start for " + proxyUrl.getFriendlyName());
+        proxyUrl.setActive();
         InputStream pIS = p.getInputStream();
         long startTime = System.nanoTime();
         long totalTime=0;
@@ -151,6 +152,7 @@ public class OggDecoder {
         // Cleanup
         staleThreadMonitor.exit();
         p.destroy();
+        proxyUrl.setInActive();
         logger.adjustDecoderCount(-1);
         logger.log(threadId, "OggDecoder: Stop for " + proxyUrl.getFriendlyName() + 
                 formatTransferRate(totalBytes, totalTime));

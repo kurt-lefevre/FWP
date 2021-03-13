@@ -7,6 +7,7 @@ public class ProxyURL {
     private final String host;
     private final String path;
     private int port;
+    private boolean active;
     private final int decodeScriptId;
     private final boolean https;
     private final String urlString;
@@ -42,6 +43,19 @@ public class ProxyURL {
         protocol=url.getProtocol();
     }
 
+    public void setActive() {
+        active=true;
+    }
+
+    public void setInActive() {
+        active=false;
+    }
+    
+    public char getActive() {
+        if(active) return '*';
+        else return ' ';
+    }
+    
     public int getDecodeScriptId() {
         return decodeScriptId;
     }

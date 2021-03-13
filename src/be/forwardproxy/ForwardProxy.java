@@ -10,6 +10,9 @@
     1.6.090321   | Added debug & logging info to info web page
     1.7.090321   | Increased socket timeout
     1.8.090321   | Cosmetic update in showInfo()
+    2.0.110321   | Non audio content interception. Better stale thread handling
+                 | Multiple decoding scripts support, new scripts & config filz
+    2.1.130321   | Show active stations in showInfo()
     -------------+--------------------------------------------------------------
 */
 
@@ -35,7 +38,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V2.0.110321";
+    private final static String APP_VERSION = "ForwardProxy V2.1.130321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -444,8 +447,8 @@ public class ForwardProxy {
             append("I/O buffer size  ").append(ioBufferSize/1024).append(" kB\n\n").
             append("Stations\n--------\n");
         for(ProxyURL station : radioListSorted) {
-            sb.append("  ").append(station.getFriendlyName()).append(" (").
-                    append(station.getSearchPath()).append(")\n");
+            sb.append(station.getActive()).append(' ').append(station.getFriendlyName()).
+                    append(" (").append(station.getSearchPath()).append(")\n");
         }
         sb.append("\nKurt Lefevre (linkedin.com/in/lefevrekurt)");
             
