@@ -51,9 +51,9 @@ public class ProxyURL {
         clientCount--;
     }
     
-    public char getActive() {
-        if(clientCount==0) return ' ';
-        else return (char)('0'+clientCount);
+    public String getActive() {
+        if(clientCount==0) return "    ";
+        else return String.format("%3d ", clientCount);
     }
     
     public int getDecodeScriptId() {

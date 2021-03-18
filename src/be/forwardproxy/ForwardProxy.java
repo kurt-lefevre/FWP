@@ -13,6 +13,7 @@
     2.0.110321   | Non audio content interception. Better stale thread handling
                  | Multiple decoding scripts support, new scripts & config filz
     2.1.130321   | Show active stations in showInfo()
+    2.2.180321   | Added "compatibility_mode" parameter in config file
     -------------+--------------------------------------------------------------
 */
 
@@ -38,7 +39,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V2.1.130321";
+    private final static String APP_VERSION = "ForwardProxy V2.2.180321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -50,6 +51,7 @@ public class ForwardProxy {
     private long bootTime;
     private String bootTimeStr;
     private boolean log;
+    private boolean compatibilityMode;
     
     // exit statuses
     public final static int SUCCESS = 0;
@@ -338,10 +340,12 @@ public class ForwardProxy {
             }
 
             // start decoder when "Range: bytes=0-" is in the request
-            boolean needDecoding = false;
+            // if compatibilityMode == true, than needDecoding has to be always true
+            // else needDecoding = false by default
+            boolean needDecoding = compatibilityMode;
             
             // Naim specific. It avoids starting multiple time the decode process
-            if(indexOf(inputBytes, 0, bytesRead, "bytes=0-")!=-1) needDecoding = true;
+            if(!compatibilityMode && indexOf(inputBytes, 0, bytesRead, "bytes=0-")!=-1) needDecoding = true;
             
             // create request and send it to the music service
             replace(inputBytes, 0, bytesRead, searchPath, proxyUrl.getPath());
@@ -381,8 +385,8 @@ public class ForwardProxy {
                     sb.append("HTTP/1.0 200 OK\nContent-Type: audio/wav").
                         append("\nicy-description:").append(proxyUrl.getFriendlyName()).
                         append("\nicy-name:").append(proxyUrl.getFriendlyName()).
-                        append(" streamed by ForwardProxy - ©Kurt Lefevre").
-                        append("\nicy-pub:0\r\n\r\n");
+                        append(" streamed by ").append(APP_VERSION).
+                        append(" - ©Kurt Lefevre\nicy-pub:0\r\n\r\n");
 
                     byte[] bytes = sb.toString().getBytes();
                     System.arraycopy(bytes, 0, inputBytes, 0, bytes.length);
@@ -435,19 +439,21 @@ public class ForwardProxy {
                 diff/3600000%24,diff/60000%60, diff/1000%60);
         
         sb.append(APP_VERSION).append('\n').append(UNDERLINE).append("\n\n").
-            append("Decoders         ").append(logger.getDecoderCount()).append('\n').
+            append("Device type      ");
+        if(compatibilityMode) sb.append("GENERIC"); else sb.append("naim");
+        sb.append("\nConnections      ").append(logger.getDecoderCount()).append('\n').
             append("Threads          ").append(logger.getThreadCount()).append('\n').
             append("Up time          ").append(uptime).append('\n').
             append("Boot time        ").append(bootTimeStr).append('\n').
             append("Logging          ");
-        if(log) sb.append("ON\n"); else sb.append("OFF\n");
-        sb.append("Debug mode       ");
+        if(log) sb.append("ON"); else sb.append("OFF");
+        sb.append ("\nDebug mode       ");
         if(ProxyLog.DEBUG) sb.append("ON\n"); else sb.append("OFF\n");
-        sb.append("Logfile size     ").append(logger.getLogfileSize()).append(" kB\n").
+        sb.append ("Logfile size     ").append(logger.getLogfileSize()).append(" kB\n").
             append("I/O buffer size  ").append(ioBufferSize/1024).append(" kB\n\n").
             append("Stations\n--------\n");
         for(ProxyURL station : radioListSorted) {
-            sb.append(station.getActive()).append(' ').append(station.getFriendlyName()).
+            sb.append(station.getActive()).append(station.getFriendlyName()).
                     append(" (").append(station.getSearchPath()).append(")\n");
         }
         sb.append("\nKurt Lefevre (linkedin.com/in/lefevrekurt)");
@@ -613,6 +619,13 @@ public class ForwardProxy {
                     } catch(NumberFormatException e) {
                         logger.log("Can't convert IO_BUFFER_SIZE_KB [" + value + "]. Assuming " +
                             IO_BUFFER_SIZE_KB + " KB");
+                    }
+                    break;
+                case "compatibility_mode":
+                    try {
+                        compatibilityMode=Boolean.parseBoolean(value);
+                    } catch(NumberFormatException e) {
+                        logger.log("Can't convert COMPATIBILITY_MODE [" + value + "]. Assuming false");
                     }
                     break;
                 case "debug":
