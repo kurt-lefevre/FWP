@@ -14,6 +14,7 @@
                  | Multiple decoding scripts support, new scripts & config filz
     2.1.130321   | Show active stations in showInfo()
     2.2.180321   | Added "compatibility_mode" parameter in config file
+    2.3.200321   | Added "content_type" parameter in config file
     -------------+--------------------------------------------------------------
 */
 
@@ -39,7 +40,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V2.2.180321";
+    private final static String APP_VERSION = "ForwardProxy V2.3.200321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -49,6 +50,7 @@ public class ForwardProxy {
     private HashMap<String, ProxyURL> radioList;
     private ArrayList<ProxyURL> radioListSorted;
     private long bootTime;
+    private String contentType;
     private String bootTimeStr;
     private boolean log;
     private boolean compatibilityMode;
@@ -66,6 +68,7 @@ public class ForwardProxy {
     public final static int CANNOT_PARSE_CONFIG_FILE=9;
     public final static int MISSING_PORT = 10;
     public final static int INVALID_SCRIPT_NR = 11;
+    public final static int MISSING_CONTENT_TYPE = 12;
     
     public final static int IO_BUFFER_SIZE_KB = 8;
     public final static int SOCKET_TIMEOUT_MS = 10000;
@@ -369,20 +372,22 @@ public class ForwardProxy {
                 return;
             }
 
-            // limit response to HTTP content
-            int offset=indexOf(inputBytes, 0, bytesRead, "\r\n\r\n");
+            // limit response to HTTP content and add some extra bytes
+            int contentTypeLen=contentType.length();
+            int offset=indexOf(inputBytes, 0, bytesRead, "\r\n\r\n") + contentTypeLen;
             
             // Replace Content-Type info
-            if(replace(inputBytes, 0, offset, "audio/ogg", "audio/wav")==-1)
-                if(replace(inputBytes, 0, offset, "application/ogg", "audio/wav")!=-1)
-                    bytesRead-=6;
+            if(replace(inputBytes, 0, offset, "audio/ogg", contentType)!=-1)
+                bytesRead+=contentTypeLen-9;
+            else if(replace(inputBytes, 0, offset, "application/ogg", contentType)!=-1)
+                    bytesRead+=contentTypeLen-15;
                 else {
                     // if not an audio content-type response, create a fake response
                     // so the naim can deal with it.
                     if(ProxyLog.DEBUG) logger.deb(threadId, "Non audio Resp: [" + 
                             new String(inputBytes, 0, bytesRead)+"]");
                     StringBuilder sb = new StringBuilder();
-                    sb.append("HTTP/1.0 200 OK\nContent-Type: audio/wav").
+                    sb.append("HTTP/1.0 200 OK\nContent-Type: ").append(contentType).
                         append("\nicy-description:").append(proxyUrl.getFriendlyName()).
                         append("\nicy-name:").append(proxyUrl.getFriendlyName()).
                         append(" streamed by ").append(APP_VERSION).
@@ -390,10 +395,10 @@ public class ForwardProxy {
 
                     byte[] bytes = sb.toString().getBytes();
                     System.arraycopy(bytes, 0, inputBytes, 0, bytes.length);
-                    offset=bytes.length-4; // correct afterwards
                 }
             
-            offset+=4; // add the \r\n pairs again we stripped
+            // recalculte offset
+            offset=indexOf(inputBytes, 0, bytesRead, "\r\n\r\n") + 4;
             if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: Resp: [" + new String(inputBytes, 0, offset) +"]");
 
             // if decode request, pass on to decoder
@@ -441,17 +446,18 @@ public class ForwardProxy {
         sb.append(APP_VERSION).append('\n').append(UNDERLINE).append("\n\n").
             append("Device type      ");
         if(compatibilityMode) sb.append("GENERIC"); else sb.append("naim");
-        sb.append("\nConnections      ").append(logger.getDecoderCount()).append('\n').
-            append("Threads          ").append(logger.getThreadCount()).append('\n').
-            append("Up time          ").append(uptime).append('\n').
-            append("Boot time        ").append(bootTimeStr).append('\n').
-            append("Logging          ");
+        sb.append("\nConnections      ").append(logger.getDecoderCount()).
+            append("\nThreads          ").append(logger.getThreadCount()).
+            append("\nUp time          ").append(uptime).
+            append("\nBoot time        ").append(bootTimeStr).
+            append("\nLogging          ");
         if(log) sb.append("ON"); else sb.append("OFF");
         sb.append ("\nDebug mode       ");
         if(ProxyLog.DEBUG) sb.append("ON\n"); else sb.append("OFF\n");
         sb.append ("Logfile size     ").append(logger.getLogfileSize()).append(" kB\n").
-            append("I/O buffer size  ").append(ioBufferSize/1024).append(" kB\n\n").
-            append("Stations\n--------\n");
+            append("I/O buffer size  ").append(ioBufferSize/1024).append(" kB\n").
+            append("Content type     ").append(contentType).
+            append("\n\nStations\n--------\n");
         for(ProxyURL station : radioListSorted) {
             sb.append(station.getActive()).append(station.getFriendlyName()).
                     append(" (").append(station.getSearchPath()).append(")\n");
@@ -529,6 +535,11 @@ public class ForwardProxy {
             return INVALID_PORT;
         }
         
+        if(contentType==null) {
+            logger.log("Missing CONTENT_TYPE in configuration file");
+            return MISSING_CONTENT_TYPE;
+        }
+        
         // display radio station list
         if(radioList.isEmpty()) {
             logger.log("No stations defined");
@@ -547,11 +558,14 @@ public class ForwardProxy {
     private void dispStartup() {
         logger.log("Logfile size: " + logger.getLogfileSize() + " kB");
         logger.log("I/O buffer size: " + ioBufferSize/1024 + " kB");
+        logger.log("Content type: " + contentType);
+        logger.log("Compatibility mode: " + compatibilityMode);
         logger.log("");
         logger.log("Stations");
         logger.log("--------");
         for(ProxyURL station : radioListSorted) {
-            logger.log("  " + station.getFriendlyName());
+            logger.log("  " + station.getFriendlyName() + " ("
+                    + station.getSearchPath() + ")");
         }
         logger.log("");
     }
@@ -584,8 +598,8 @@ public class ForwardProxy {
                 return CANNOT_READ_CONFIG_FILE;
             }
             
-            key = oneLine[0].trim();
-            value = oneLine[1].trim();
+            key = oneLine[0].strip();
+            value = oneLine[1].strip();
             
             // parse line
             switch(key.toLowerCase()) {
@@ -641,6 +655,9 @@ public class ForwardProxy {
                     } catch(NumberFormatException e) {
                         logger.log("Can't convert LOG [" + value + "]. Assuming false");
                     }
+                    break;
+                case "content_type":
+                    contentType=value.toLowerCase();
                     break;
                 case "station":
                     // station
