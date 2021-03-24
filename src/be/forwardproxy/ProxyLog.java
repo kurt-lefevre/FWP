@@ -90,7 +90,7 @@ public class ProxyLog {
     }
     
     
-    public void deb(long threadId, String logInfo) {
+    synchronized public void deb(long threadId, String logInfo) {
         // if(!DEBUG) return;
         sBuf.setLength(0);
         sBuf.append(dateFormatter.format(new Date())).append('[').append(threadId).

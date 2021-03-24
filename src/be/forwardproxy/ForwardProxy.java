@@ -15,6 +15,7 @@
     2.1.130321   | Show active stations in showInfo()
     2.2.180321   | Added "compatibility_mode" parameter in config file
     2.3.200321   | Added "content_type" parameter in config file
+    2.4.240321   | Removed icy-br metadata in favor of the real bitrate
     -------------+--------------------------------------------------------------
 */
 
@@ -40,7 +41,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V2.3.200321";
+    private final static String APP_VERSION = "ForwardProxy V2.4.240321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -211,6 +212,12 @@ public class ForwardProxy {
             return -1;
         }
 
+        private void removeBytes(byte[] byteArr, int start, int end) {
+            // arraycopy​(Object src, int srcPos, Object dest, int destPos, int length)
+            System.arraycopy(byteArr, end, byteArr, start, 
+                    byteArr.length-end);
+        }
+        
         private int replace(byte[] byteArr, int start, int end, String fromStr, String toStr) {
             int index;
             if((index=indexOf(byteArr, start, end, fromStr))==-1) return -1;
@@ -371,13 +378,20 @@ public class ForwardProxy {
                 closeConnections();
                 return;
             }
-
+            
             // limit response to HTTP content and add some extra bytes
             int contentTypeLen=contentType.length();
             int offset=indexOf(inputBytes, 0, bytesRead, "\r\n\r\n") + contentTypeLen;
-            
+
+            // Remove naim stream specific metadata: "icy-br:128\r\n"
+            int startPos=indexOf(inputBytes, 0, offset, "icy-br");
+            if(startPos!=-1) {
+                int endPos=indexOf(inputBytes, startPos, offset, "\r");
+                removeBytes(inputBytes, startPos, endPos+2);
+            }
+
             // Replace Content-Type info
-            if(replace(inputBytes, 0, offset, "audio/ogg", contentType)!=-1)
+            if(replace(inputBytes, 0, offset, "audio/ogg", contentType)!=-1) 
                 bytesRead+=contentTypeLen-9;
             else if(replace(inputBytes, 0, offset, "application/ogg", contentType)!=-1)
                     bytesRead+=contentTypeLen-15;
@@ -397,8 +411,8 @@ public class ForwardProxy {
                     System.arraycopy(bytes, 0, inputBytes, 0, bytes.length);
                 }
             
-            // recalculte offset
-            offset=indexOf(inputBytes, 0, bytesRead, "\r\n\r\n") + 4;
+            // recalculte correct offset
+            offset=indexOf(inputBytes, 0, offset, "\r\n\r\n") + 4;
             if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: Resp: [" + new String(inputBytes, 0, offset) +"]");
 
             // if decode request, pass on to decoder
@@ -445,7 +459,7 @@ public class ForwardProxy {
         
         sb.append(APP_VERSION).append('\n').append(UNDERLINE).append("\n\n").
             append("Device type      ");
-        if(compatibilityMode) sb.append("GENERIC"); else sb.append("naim");
+        if(compatibilityMode) sb.append("generic"); else sb.append("naim");
         sb.append("\nConnections      ").append(logger.getDecoderCount()).
             append("\nThreads          ").append(logger.getThreadCount()).
             append("\nUp time          ").append(uptime).
