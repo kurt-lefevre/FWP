@@ -1,0 +1,19 @@
+Version      | Comment
+-------------+------------------------------------------------------------------
+1.0.060321   | Initial release
+1.1.070321   | Added searchpath in showInfo()
+1.2.070321   | Improved debugging of incoming requests
+1.3.070321   | Sorted radio stations when displaying them
+1.4.080321   | Added StaleThreadMonitor + Health monitor has dedicated port
+1.5.090321   | Added "log" property in config file to enable/disable logging
+1.6.090321   | Added debug & logging info to info web page
+1.7.090321   | Increased socket timeout
+1.8.090321   | Cosmetic update in showInfo()
+2.0.110321   | Non audio content interception. Better stale thread handling
+             | Multiple decoding scripts support, new scripts & config filz
+2.1.130321   | Show active stations in showInfo()
+2.2.180321   | Added "compatibility_mode" parameter in config file
+2.3.240321   | Added "content_type" parameter in config file
+             | Removed icy-br metadata in favor of the real bitrate
+-------------+------------------------------------------------------------------
+

@@ -1,24 +1,3 @@
-/*
-    Version      | Comment
-    -------------+--------------------------------------------------------------
-    1.0.060321   | Initial release
-    1.1.070321   | Added searchpath in showInfo()
-    1.2.070321   | Improved debugging of incoming requests
-    1.3.070321   | Sorted radio stations when displaying them
-    1.4.080321   | Added StaleThreadMonitor + Health monitor has dedicated port
-    1.5.090321   | Added "log" property in config file to enable/disable logging
-    1.6.090321   | Added debug & logging info to info web page
-    1.7.090321   | Increased socket timeout
-    1.8.090321   | Cosmetic update in showInfo()
-    2.0.110321   | Non audio content interception. Better stale thread handling
-                 | Multiple decoding scripts support, new scripts & config filz
-    2.1.130321   | Show active stations in showInfo()
-    2.2.180321   | Added "compatibility_mode" parameter in config file
-    2.3.200321   | Added "content_type" parameter in config file
-    2.4.240321   | Removed icy-br metadata in favor of the real bitrate
-    -------------+--------------------------------------------------------------
-*/
-
 package be.forwardproxy;
 
 import java.io.IOException;
@@ -41,7 +20,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V2.4.240321";
+    private final static String APP_VERSION = "ForwardProxy V2.3.240321";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -212,12 +191,6 @@ public class ForwardProxy {
             return -1;
         }
 
-        private void removeBytes(byte[] byteArr, int start, int end) {
-            // arraycopy​(Object src, int srcPos, Object dest, int destPos, int length)
-            System.arraycopy(byteArr, end, byteArr, start, 
-                    byteArr.length-end);
-        }
-        
         private int replace(byte[] byteArr, int start, int end, String fromStr, String toStr) {
             int index;
             if((index=indexOf(byteArr, start, end, fromStr))==-1) return -1;
@@ -372,7 +345,6 @@ public class ForwardProxy {
             // read response from music service
             try {
                 bytesRead=toIS.read(inputBytes);
-                if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: bytesRead: " + bytesRead);
             } catch (IOException ex) {
                 logger.log(threadId, "RequestHandler: Cannot read server response: " + ex.getMessage());
                 closeConnections();
@@ -383,11 +355,18 @@ public class ForwardProxy {
             int contentTypeLen=contentType.length();
             int offset=indexOf(inputBytes, 0, bytesRead, "\r\n\r\n") + contentTypeLen;
 
+            // Unmodified response
+            if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: " + bytesRead + 
+                    " bytesRead - Org Resp: [" + new String(inputBytes, 0, offset) +"]");
+            
+            
             // Remove naim stream specific metadata: "icy-br:128\r\n"
             int startPos=indexOf(inputBytes, 0, offset, "icy-br");
             if(startPos!=-1) {
-                int endPos=indexOf(inputBytes, startPos, offset, "\r");
-                removeBytes(inputBytes, startPos, endPos+2);
+                int endPos=indexOf(inputBytes, startPos, offset, "\r")+2;
+                System.arraycopy(inputBytes, endPos, inputBytes, startPos, 
+                        inputBytes.length-endPos);
+                bytesRead = bytesRead - endPos + startPos;
             }
 
             // Replace Content-Type info
@@ -413,7 +392,8 @@ public class ForwardProxy {
             
             // recalculte correct offset
             offset=indexOf(inputBytes, 0, offset, "\r\n\r\n") + 4;
-            if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: Resp: [" + new String(inputBytes, 0, offset) +"]");
+            if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: " + bytesRead + 
+                    " bytesRead - Mod Resp: [" + new String(inputBytes, 0, offset) +"]");
 
             // if decode request, pass on to decoder
             if(needDecoding) {
