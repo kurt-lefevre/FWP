@@ -20,7 +20,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 public class ForwardProxy {
-    private final static String APP_VERSION = "ForwardProxy V2.3.240321";
+    private final static String APP_VERSION = "ForwardProxy V2.4.080421";
     private final static String UNDERLINE =   "========================";
 
     private final ProxyLog logger = ProxyLog.getInstance();
@@ -89,7 +89,7 @@ public class ForwardProxy {
         
         public void run() {
             logger.incThreadCount();
-            logger.log(threadId, "MonitorHandler: Start");
+            logger.log(threadId, "MonitorHandler: Start [" +  socket.getInetAddress().getHostAddress() + "]");
             // get  inputstream
             try {
                 socket.setSoTimeout(SOCKET_TIMEOUT_MS);
@@ -132,7 +132,7 @@ public class ForwardProxy {
                         os.write("HTTP/1.1 200 OK\r\n\r\n".getBytes());
                     else {
                         logger.log(threadId, "MonitorHandler: Health request");
-                        os.write(showInfo());
+                        os.write(dispInfo(true).getBytes());
                     }
                 } catch (IOException ex) {
                     logger.log(threadId, "MonitorHandler: Failed to send health response: "
@@ -225,7 +225,7 @@ public class ForwardProxy {
 
         public void run() {
             logger.incThreadCount();
-            logger.log(threadId, "RequestHandler: Start");
+            logger.log(threadId, "RequestHandler: Start [" +  socket.getInetAddress().getHostAddress() + "]");
             // get client inputstream
             try {
                 socket.setSoTimeout(SOCKET_TIMEOUT_MS);
@@ -357,8 +357,7 @@ public class ForwardProxy {
 
             // Unmodified response
             if(ProxyLog.DEBUG) logger.deb(threadId, "RequestHandler: " + bytesRead + 
-                    " bytesRead - Org Resp: [" + new String(inputBytes, 0, offset) +"]");
-            
+                    " bytesRead - Org Resp: [" + new String(inputBytes, 0, offset-contentTypeLen+4) +"]");
             
             // Remove naim stream specific metadata: "icy-br:128\r\n"
             int startPos=indexOf(inputBytes, 0, offset, "icy-br");
@@ -397,6 +396,11 @@ public class ForwardProxy {
 
             // if decode request, pass on to decoder
             if(needDecoding) {
+//                new FlacWriter(this.getId(), ioBufferSize, fromOS).
+//                        decode(inputBytes, offset);
+//                new OggFlacDecoder(this.getId(), proxyUrl, ioBufferSize, fromOS, toIS).
+//                        decode(inputBytes, offset, bytesRead);
+
                 // We don't need those anymore
                 try { toSocket.close(); } catch (Exception ex) {};
                 try { toIS.close(); } catch (Exception ex) {};
@@ -431,7 +435,9 @@ public class ForwardProxy {
         }
     }
     
-    private byte[] showInfo() {
+    
+    
+    private String dispInfo(boolean isHttp) {
         long diff = System.currentTimeMillis() - bootTime;
         StringBuilder sb = new StringBuilder();
         String uptime = String.format("%d days %02d:%02d:%02d", diff/86400000, 
@@ -440,11 +446,11 @@ public class ForwardProxy {
         sb.append(APP_VERSION).append('\n').append(UNDERLINE).append("\n\n").
             append("Device type      ");
         if(compatibilityMode) sb.append("generic"); else sb.append("naim");
-        sb.append("\nConnections      ").append(logger.getDecoderCount()).
+        if(isHttp) sb.append("\nConnections      ").append(logger.getDecoderCount()).
             append("\nThreads          ").append(logger.getThreadCount()).
             append("\nUp time          ").append(uptime).
-            append("\nBoot time        ").append(bootTimeStr).
-            append("\nLogging          ");
+            append("\nBoot time        ").append(bootTimeStr);
+        sb.append("\nLogging          ");
         if(log) sb.append("ON"); else sb.append("OFF");
         sb.append ("\nDebug mode       ");
         if(ProxyLog.DEBUG) sb.append("ON\n"); else sb.append("OFF\n");
@@ -456,11 +462,13 @@ public class ForwardProxy {
             sb.append(station.getActive()).append(station.getFriendlyName()).
                     append(" (").append(station.getSearchPath()).append(")\n");
         }
+        
+        if(!isHttp) return sb.toString();
+                
         sb.append("\nKurt Lefevre (linkedin.com/in/lefevrekurt)");
-            
         String msg = "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=UTF-8\r\nContent-Length: "
                             + sb.length() + "\r\n\r\n" + sb.toString();
-        return msg.getBytes();
+        return msg;
     }
     
     private int createForwardProxyServer() {
@@ -547,21 +555,6 @@ public class ForwardProxy {
         Collections.sort(radioListSorted, FRIENDLY_NAME_COMPARATOR);
 
         return SUCCESS;
-    }
-    
-    private void dispStartup() {
-        logger.log("Logfile size: " + logger.getLogfileSize() + " kB");
-        logger.log("I/O buffer size: " + ioBufferSize/1024 + " kB");
-        logger.log("Content type: " + contentType);
-        logger.log("Compatibility mode: " + compatibilityMode);
-        logger.log("");
-        logger.log("Stations");
-        logger.log("--------");
-        for(ProxyURL station : radioListSorted) {
-            logger.log("  " + station.getFriendlyName() + " ("
-                    + station.getSearchPath() + ")");
-        }
-        logger.log("");
     }
     
     private int readConfiguration(String configFile ) {
@@ -709,7 +702,7 @@ public class ForwardProxy {
         if(retVal!=SUCCESS) return retVal;
 
         // Arguments parsed successfully
-        dispStartup();
+        logger.log('\n' + dispInfo(false));
         
         // Start proxy server
         Thread proxyServerThread = new Thread(){

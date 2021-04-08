@@ -15,5 +15,6 @@ Version      | Comment
 2.2.180321   | Added "compatibility_mode" parameter in config file
 2.3.240321   | Added "content_type" parameter in config file
              | Removed icy-br metadata in favor of the real bitrate
+2.4.080421   | Added ip address logging
 -------------+------------------------------------------------------------------
 
