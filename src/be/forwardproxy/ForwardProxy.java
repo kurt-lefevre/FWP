@@ -438,18 +438,21 @@ public class ForwardProxy {
     
     
     private String dispInfo(boolean isHttp) {
-        long diff = System.currentTimeMillis() - bootTime;
         StringBuilder sb = new StringBuilder();
-        String uptime = String.format("%d days %02d:%02d:%02d", diff/86400000, 
-                diff/3600000%24,diff/60000%60, diff/1000%60);
         
         sb.append(APP_VERSION).append('\n').append(UNDERLINE).append("\n\n").
             append("Device type      ");
         if(compatibilityMode) sb.append("generic"); else sb.append("naim");
-        if(isHttp) sb.append("\nConnections      ").append(logger.getDecoderCount()).
-            append("\nThreads          ").append(logger.getThreadCount()).
-            append("\nUp time          ").append(uptime).
-            append("\nBoot time        ").append(bootTimeStr);
+        if(isHttp) {
+            long diff = System.currentTimeMillis() - bootTime;
+            String uptime = String.format("%d days %02d:%02d:%02d", diff/86400000, 
+                    diff/3600000%24,diff/60000%60, diff/1000%60);
+            
+            sb.append("\nConnections      ").append(logger.getDecoderCount()).
+                append("\nThreads          ").append(logger.getThreadCount()).
+                append("\nUp time          ").append(uptime).
+                append("\nBoot time        ").append(bootTimeStr);
+        }
         sb.append("\nLogging          ");
         if(log) sb.append("ON"); else sb.append("OFF");
         sb.append ("\nDebug mode       ");
