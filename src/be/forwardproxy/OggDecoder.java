@@ -15,7 +15,7 @@ import java.net.SocketException;
 
 public class OggDecoder {
     private final ProxyURL proxyUrl;
-    private final int ioBufferSize;
+    private final int IO_BUFFER_SIZE;
     private static final ProxyLog logger=ProxyLog.getInstance();
     private static final String APPLICATION_DIR = logger.getApplicationDir();
     private static final String DECODE_SCRIPT = "decode";
@@ -38,7 +38,17 @@ public class OggDecoder {
             loop=false;
             this.interrupt();
         }
-        
+
+        public void killDecodeProcess() {
+            ProcessBuilder pk = new ProcessBuilder(APPLICATION_DIR + KILL_SCRIPT, Long.toString(pId));
+            try {
+                pk.start();
+            } catch (Exception ex) {
+                logger.log(threadId, "StaleThreadMonitor: Failed to run process kill script "
+                    + APPLICATION_DIR + KILL_SCRIPT + ": " + ex.getMessage()); 
+            }
+        }
+
         public void run() {
             if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: Start");
             logger.incThreadCount();
@@ -48,7 +58,7 @@ public class OggDecoder {
                 // wait
                 try { Thread.sleep(CHECK_INTERVAL_MS); } 
                 catch (InterruptedException ex) {
-                    if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: Terminated during sleep");
+                    if(ProxyLog.DEBUG) logger.deb(threadId, "StaleThreadMonitor: Terminated during wait");
                     break;
                 }
                 
@@ -66,13 +76,8 @@ public class OggDecoder {
                     }
 
                     // Kill the decode process and its decendants
-                    ProcessBuilder pk = new ProcessBuilder(APPLICATION_DIR + KILL_SCRIPT, Long.toString(pId));
-                    try {
-                        pk.start();
-                    } catch (Exception ex) {
-                        logger.log(threadId, "StaleThreadMonitor: Failed to run process kill script "
-                            + APPLICATION_DIR + KILL_SCRIPT + ": " + ex.getMessage()); 
-                    }
+                    killDecodeProcess();
+                    
                     logger.log(threadId, "StaleThreadMonitor: Terminated stale thread");
                     break;
                 }
@@ -86,7 +91,7 @@ public class OggDecoder {
     public OggDecoder(long threadId, ProxyURL proxyUrl, int ioBufferSize, OutputStream os) {
         this.proxyUrl=proxyUrl;
         this.threadId=threadId;
-        this.ioBufferSize=ioBufferSize;
+        this.IO_BUFFER_SIZE=ioBufferSize;
         this.os=os;
     }
 
@@ -104,7 +109,6 @@ public class OggDecoder {
     }
     
     public void decode(byte[] inputBytes, int streamOffset) {
-//      ProcessBuilder pb = new ProcessBuilder("ffmpeg" , "-f", "ogg", "-i", proxyUrl.getUrlString(), "-f", "wav", "-map_metadata", "0",  "-id3v2_version", "3", "-");
         String decodeScript = APPLICATION_DIR + DECODE_SCRIPT + proxyUrl.getDecodeScriptId()+".sh";
         ProcessBuilder pb = new ProcessBuilder(decodeScript, proxyUrl.getUrlString());
         pb.redirectError(ProcessBuilder.Redirect.DISCARD);
@@ -129,12 +133,12 @@ public class OggDecoder {
         long totalTime=0;
         int bytesRead=0;
         try {
-            while((bytesRead=pIS.read(inputBytes, streamOffset, ioBufferSize-streamOffset))!=-1) {
+            while((bytesRead=pIS.read(inputBytes, streamOffset, IO_BUFFER_SIZE-streamOffset))!=-1) {
                 streamOffset += bytesRead;
-                if(streamOffset==ioBufferSize) {
+                if(streamOffset==IO_BUFFER_SIZE) {
                     try {
                         os.write(inputBytes);
-                        totalBytes += ioBufferSize;
+                        totalBytes += IO_BUFFER_SIZE;
                         if(ProxyLog.DEBUG) logger.deb(threadId, "OggDecoder: Sent buffer to streamer");
                     } catch (SocketException ex) {  //ex.printStackTrace();
                         totalTime=System.nanoTime() - startTime;
@@ -150,8 +154,9 @@ public class OggDecoder {
         }
 
         // Cleanup
+        staleThreadMonitor.killDecodeProcess();
         staleThreadMonitor.exit();
-        p.destroy();
+        //p.destroy();
         proxyUrl.decClientCount();
         logger.decDecoderCount();
         logger.log(threadId, "OggDecoder: Stop for " + proxyUrl.getFriendlyName() + 
