@@ -17,5 +17,6 @@ Version      | Comment
              | Removed icy-br metadata in favor of the real bitrate
 2.4.080421   | Added ip address logging
 2.5.120421   | Replaced p.destroy() with killDecodeProcess()
+             | Changed path from fwdhealth to fwphealt
 -------------+------------------------------------------------------------------
 

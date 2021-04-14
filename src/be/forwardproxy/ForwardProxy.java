@@ -124,7 +124,7 @@ public class ForwardProxy {
             if(ProxyLog.DEBUG) logger.deb(threadId, "MonitorHandler: Req: [" + new String(inputBytes, 0, bytesRead)+"]");
             
             // check for special health request
-            if(indexOf(inputBytes, 0, bytesRead, "fwdhealth")!=-1) {
+            if(indexOf(inputBytes, 0, bytesRead, "fwphealth")!=-1) {
                 if(ProxyLog.DEBUG) logger.deb(threadId, "MonitorHandler: Health request");
                 try {
                     if(indexOf(inputBytes, 0, bytesRead, "GET /favicon.ico")!=-1 ||
