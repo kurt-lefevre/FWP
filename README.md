@@ -1,5 +1,5 @@
 # FWP
-Forward Proxy is an open source project to allow Naim Gen 1 devices enjoying HD internet radio streams. Actually all devices that do not suport the Ogg format.  
+Forward Proxy is an open source project to allow Naim Gen 1 devices enjoying HD internet radio streams. Actually all devices that do not suport the Ogg or HLS formats.  
   
   See readme in the release assets for version details.   
   
